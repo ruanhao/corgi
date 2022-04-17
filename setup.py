@@ -21,7 +21,8 @@ config = {
     'setup_requires': ['wheel'],
     'entry_points': {
         'console_scripts': [
-            'corgi_vcenter = corgi_vcenter.main:cli'
+            'corgi_vcenter = corgi_vcenter.main:cli',
+            'corgi_aws = corgi_aws.main:cli'
         ]
     },
 }
