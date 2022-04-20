@@ -3,6 +3,11 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from tabulate import tabulate
+import subprocess
+import sys
+
+
+logger = logging.getLogger(__name__)
 
 
 def config_logging(name, level=logging.INFO):
@@ -47,3 +52,39 @@ def tabulate_print(data, mappings):
                 attrs.append(get(item, k))
         tabdata.append(attrs)
     print(tabulate(tabdata, headers=headers))
+
+
+def run_script(command, capture=False, realtime=False):
+    """When realtime == True, stderr will be redirected to stdout"""
+    if 'logger' in globals():
+        globals()['logger'].debug(f"Running subprocess: [{command}] (capture: {capture})")
+    process = subprocess.Popen(
+        ['/bin/bash', '-c', command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT if realtime else subprocess.PIPE if capture else subprocess.DEVNULL,
+        encoding='utf-8',
+        bufsize=1,              # line buffered
+    )
+    if not realtime:
+        stdout, stderr = process.communicate()
+        rc = process.returncode
+    else:
+        stdout, stderr = '', ''
+        last_n_lines = []
+        while True:
+            realtime_output = process.stdout.readline()
+            if realtime_output == '' and process.poll() is not None:
+                break
+            if realtime_output:
+                print(realtime_output.rstrip())
+                last_n_lines.append(realtime_output.rstrip()); last_n_lines = last_n_lines[-10:]
+                sys.stdout.flush()
+                if capture:
+                    stdout += realtime_output
+        rc = process.poll()
+        stdout, stderr = stdout.rstrip(), None if realtime else process.stderr.read().rstrip()
+    if rc and 'logger' in globals():
+        globals()['logger'].critical(f"Subprocess Failed ({rc}): {os.linesep.join(last_n_lines).rstrip() if realtime else stderr}")
+    if rc and not capture:
+        raise Exception(f"Subprocess Failed ({rc}): {os.linesep.join(last_n_lines).rstrip() if realtime else stderr}")
+    return rc, stdout, stderr

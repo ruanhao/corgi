@@ -3,7 +3,7 @@ import logging
 import datetime
 from .vmagent import Agent as VmAgent
 from .folderagent import Agent as FolderAgent
-from corgi_common import tabulate_print
+from corgi_common import tabulate_print, run_script
 import json
 import os
 import tempfile
@@ -11,15 +11,6 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-def run_script(script):
-    proc = subprocess.Popen(['bash', '-c', script],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            stdin=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    if proc.returncode:
-        raise Exception(f'exit code {proc.returncode}: \n{stderr}')
-    return stdout, stderr
 
 
 @click.group(help="Utils for VM management")
@@ -125,7 +116,7 @@ govc import.ova -options={spec_path} --name={vm_name} {ova_path} && \\
 govc vm.change -debug -vm {(folder if folder else default_folder) + "/" + vm_name} -c {cpu} -m {mem} && \\
 govc vm.power  -on {(folder if folder else default_folder) + "/" + vm_name}
 """
-    print(cmd)
+    run_script(cmd, realtime=True)
 
 
 vm.add_command(list_vm, "list")
