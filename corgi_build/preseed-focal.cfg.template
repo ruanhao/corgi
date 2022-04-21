@@ -1,0 +1,14 @@
+d-i preseed/include string ../ubuntu/preseed.cfg
+
+d-i clock-setup/utc boolean true
+d-i clock-setup/utc-auto boolean true
+d-i pkgsel/install-language-support boolean false
+d-i pkgsel/update-policy select none
+d-i pkgsel/upgrade select full-upgrade
+d-i user-setup/encrypt-home boolean false
+tasksel tasksel/first multiselect standard, server
+
+d-i preseed/late_command string                                                   \
+        echo 'Defaults:$username !requiretty' > /target/etc/sudoers.d/$username;      \
+        echo '$username ALL=(ALL) NOPASSWD: ALL' >> /target/etc/sudoers.d/$username;  \
+        chmod 440 /target/etc/sudoers.d/$username;

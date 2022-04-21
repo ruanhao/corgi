@@ -1,0 +1,55 @@
+# Reference: https://help.ubuntu.com/20.04/installation-guide/example-preseed.txt
+
+d-i debian-installer/locale string en_US
+
+d-i mirror/country string manual
+d-i mirror/http/hostname string sjc-linux.cisco.com
+d-i mirror/http/directory string /ubuntu
+d-i mirror/http/proxy string
+
+d-i time/zone string UTC
+
+d-i keyboard-configuration/xkb-keymap select us
+
+d-i partman-auto/method string regular
+d-i partman-auto/expert_recipe string \
+        scheme ::                     \
+        400 400 400 ext4              \
+                $$primary{ }           \
+                $$bootable{ }          \
+                method{ format }      \
+                format{ }             \
+                use_filesystem{ }     \
+                filesystem{ ext4 }    \
+                mountpoint{ /boot } . \
+        $SWAP_SIZE $SWAP_SIZE $SWAP_SIZE linux-swap       \
+                $$primary{ }           \
+                method{ swap }        \
+                format{ } .           \
+        1 0 -1  ext4                  \
+                $$primary{ }           \
+                $$bootable{ }          \
+                method{ format }      \
+                format{ }             \
+                use_filesystem{ }     \
+                filesystem{ ext4 }    \
+                mountpoint{ / } .
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+d-i base-installer/excludes string laptop-detect
+
+d-i passwd/user-fullname string $username
+d-i passwd/username string $username
+d-i passwd/user-uid string 1234
+d-i passwd/user-password password $password
+d-i passwd/user-password-again password $password
+d-i user-setup/allow-password-weak boolean true
+
+d-i pkgsel/include string curl openssh-server sudo rsync net-tools
+d-i pkgsel/upgrade select safe-upgrade
+d-i pkgsel/language-packs multiselect en
+
+d-i finish-install/reboot_in_progress note

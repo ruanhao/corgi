@@ -22,7 +22,8 @@ config = {
     'entry_points': {
         'console_scripts': [
             'corgi_vcenter = corgi_vcenter.main:cli',
-            'corgi_aws = corgi_aws.main:cli'
+            'corgi_aws = corgi_aws.main:cli',
+            'corgi_build = corgi_build.main:cli',
         ]
     },
 }
