@@ -81,12 +81,13 @@ def delete(ctx, vm):
 @click.option('--folder', '-f', required=False, help="Folder (govc find . -type f)", envvar='GOVC_FOLDER')
 @click.option('--cpu', required=False, default=4, help="CPU number")
 @click.option('--mem', required=False, default=8192, help="Memory (MB)")
+@click.option('--dry', is_flag=True)
 @click.pass_context
-def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem):
+def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem, dry):
     logger.info(f"ova_path: {ova_path}, rp: {resource_pool}, ds: {datastore}, folder: {folder}")
     filename = ova_path.split('/')[-1].replace('.ova', '')
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    vm_name = f'{filename}-{timestamp}-haoru'
+    vm_name = f'{filename}-haoru-{timestamp}'[:80]
     if not spec_path:
         spec = {
             "DiskProvisioning": "flat",
@@ -116,7 +117,10 @@ govc import.ova -options={spec_path} --name={vm_name} {ova_path} && \\
 govc vm.change -debug -vm {(folder if folder else default_folder) + "/" + vm_name} -c {cpu} -m {mem} && \\
 govc vm.power  -on {(folder if folder else default_folder) + "/" + vm_name}
 """
-    run_script(cmd, realtime=True)
+    if dry:
+        click.echo(cmd)
+    else:
+        run_script(cmd, realtime=True)
 
 
 vm.add_command(list_vm, "list")
