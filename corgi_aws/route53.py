@@ -1,7 +1,7 @@
 import click
 import logging
 import boto3
-
+from corgi_common import tabulate_print
 client = None
 
 logger = logging.getLogger(__name__)
@@ -12,6 +12,9 @@ def fatal(msg):
     click.echo(msg, err=True)
     raise click.Abort()
 
+def _get_zone_ids():
+    zones = client.list_hosted_zones()['HostedZones']
+    return [zone['Id'] for zone in zones]
 
 def _get_zone_id(zone_name):
     zones = client.list_hosted_zones()['HostedZones']
@@ -35,6 +38,32 @@ def route53(api_key, api_secret):
     )
     global client
     client = session.client('route53')
+
+
+@route53.command(help="List record")
+@click.option("--zone", "-z", help="Zone name", required=False)
+def ls_record(zone):
+    if zone:
+        zone_ids =  [_get_zone_id(zone)]
+    else:
+        zone_ids = _get_zone_ids()
+
+    for zone_id in zone_ids:
+        response = client.list_resource_record_sets(HostedZoneId=zone_id)
+        record_sets = response['ResourceRecordSets']
+        result = []
+        for record in record_sets:
+            if record['Type'] == 'A':
+                result.append({'name': record['Name'], 'value': record['ResourceRecords'][0]['Value'], 'type': record['Type']})
+        if result:
+            tabulate_print(result, {
+                'IP': 'value',
+                'Name': 'name',
+                # 'Type': 'type',
+            })
+            print()
+
+    pass
 
 
 @click.command(help="Create record")

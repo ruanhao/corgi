@@ -6,10 +6,13 @@ from tabulate import tabulate
 import subprocess
 import sys
 import signal
+import getpass
 from contextlib import contextmanager
 # from threading import Thread
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
+import json
+from pprint import pprint
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,16 @@ def get(obj, key):
     return _chain_get(obj, key, 'N/A')
 
 
+def json_print(data):
+    if isinstance(data, dict):
+        print(json.dumps(data, indent=4))
+    elif isinstance(data, list):
+        try:
+            print(json.dumps([dict(d) for d in data], indent=4))
+        except Exception:
+            pprint([dict(d) for d in data])
+
+
 def tabulate_print(data, mappings):
     headers = mappings.keys()
     tabdata = []
@@ -138,7 +151,7 @@ def pre_exec():
 def run_script(command, capture=False, realtime=False):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
-
+    print("$> " + command)
     preexec_options = {}
     if sys.platform.startswith('win'):
         # https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
@@ -168,6 +181,7 @@ def run_script(command, capture=False, realtime=False):
                 if process.poll() is not None:
                     break
                 if realtime_output:
+                    logger.debug(f"[{process.pid}:stdout] " + realtime_output.rstrip())
                     print(realtime_output.rstrip())
                     last_n_lines.append(realtime_output.rstrip()); last_n_lines = last_n_lines[-10:]
                     sys.stdout.flush()
@@ -189,3 +203,18 @@ def run_script(command, capture=False, realtime=False):
     finally:
         if nbsr:
             nbsr.close()
+
+# annotation
+def as_root(func):
+    def inner_function(*args, **kwargs):
+        if not is_root():
+            bye("Please run as root.")
+        func(*args, **kwargs)
+    return inner_function
+
+def is_root():
+    return getpass.getuser() == 'root'
+
+def bye(msg, rc=1):
+    print(msg, file=sys.stderr)
+    exit(rc)

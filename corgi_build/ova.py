@@ -78,7 +78,8 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
 @click.option('--username', default='cisco', help="Login username")
 @click.option('--password', default='cisco', help="Login password")
 @click.option('--dry', is_flag=True, help="Show script without running")
-def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, dry):
+@click.option('--no-swap', is_flag=True, help="Disable swap")
+def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, dry, no_swap):
     if not swap:
         swap = int(memory / 2)
     if not name:
@@ -89,11 +90,11 @@ def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, 
     logger.info(f"Starting building ova, cpu: {cpu}, memory: {memory}, disk: {disk}, swap: {swap}, "
                 f"OS: {os_code}, name: {name}, version: {version}, credential: {username}/{password}")
 
-    with switch_cwd(_prepare_staging_dir(name, os_code, username, password, swap)):
+    with switch_cwd(_prepare_staging_dir(name, os_code, username, password)):
         _prepare_preseed_cfg(username, password, swap, os_code)
         _prepare_packer_json(os_code, username, password, name, version, cpu, disk, memory)
         _prepare_ovf(name, os_code, memory, cpu, disk, version)
-        _prepare_customize_script(username)
+        _prepare_customize_script(username, no_swap)
 
         # run_script(f'packer build -timestamp-ui -force {os_code}.json', realtime=True)
         script = f'''
@@ -129,7 +130,7 @@ cd {os.getcwd()};
             # run_script("ping -c 5 www.baidu.com", realtime=True)
 
 
-def _prepare_customize_script(username):
+def _prepare_customize_script(username, no_swap):
     logger.info("Creating customizing script ...")
     script = """
 # basic
@@ -179,6 +180,9 @@ update-grub;
 
 EOF
 """
+    if no_swap:
+        script += """sudo swapoff -a && sudo sed -i '/ swap / s/^\\(.*\\)$/# \\1/g' /etc/fstab
+"""
     with open('customize.sh', 'w') as f:
         f.write(script)
 
@@ -204,7 +208,7 @@ def _prepare_packer_json(os_code, username, password, name, version, cpu, disk, 
     pass
 
 
-def _prepare_staging_dir(name, os_code, username, password, swap):
+def _prepare_staging_dir(name, os_code, username, password):
     cwd = os.getcwd()
     staging_dir = os.path.join(cwd, f"{name}-{os_code}-staging")
     if os.path.exists(staging_dir):

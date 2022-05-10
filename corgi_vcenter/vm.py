@@ -82,12 +82,13 @@ def delete(ctx, vm):
 @click.option('--cpu', required=False, default=4, help="CPU number")
 @click.option('--mem', required=False, default=8192, help="Memory (MB)")
 @click.option('--dry', is_flag=True)
+@click.option('--name', '-n', required=False, help="VM name")
 @click.pass_context
-def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem, dry):
+def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem, dry, name):
     logger.info(f"ova_path: {ova_path}, rp: {resource_pool}, ds: {datastore}, folder: {folder}")
     filename = ova_path.split('/')[-1].replace('.ova', '')
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    vm_name = f'{filename}-haoru-{timestamp}'[:80]
+    vm_name = f'{name or filename}-haoru-{timestamp}'[:80]
     if not spec_path:
         spec = {
             "DiskProvisioning": "flat",
