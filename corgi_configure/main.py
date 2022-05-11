@@ -1,10 +1,17 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import click
-from corgi_common import config_logging, run_script, is_root, bye
+from corgi_common import config_logging, run_script, is_root, bye, as_root, switch_cwd
+import json
+import tempfile
 import logging
 
-config_logging('corgi_misc', logging.DEBUG)
+config_logging('corgi_configure', logging.DEBUG)
+
+
+@as_root
+def run_as_root(*args, **kwargs):
+    run_script(*args, **kwargs)
 
 @click.group(help="Handy scripts")
 def cli():
@@ -47,3 +54,94 @@ echo "{server}:{server_dir} {local_dir} nfs rw,hard,intr,rsize=8192,wsize=8192,t
     if not is_root():
         bye("Should run as root.")
     run_script(script, realtime=True)
+
+
+@cli.command(short_help="Generate KUBECONFIG for user")
+@click.option("--api-server", '-s', help='API Server address', required=True)
+@click.option("--api-server-port", default=6443, help='API Server port')
+@click.option("--pki-path", default='/etc/kubernetes/pki', help="Directory where CA resides")
+@click.option("--cfssl-version", default='1.6.1', help="CFSSL version")
+@click.option("--user", '-u', required=True)
+@click.option("--group", '-g', required=True)
+@click.option("--namespace", '-ns', default='default')
+@click.option('--dry', is_flag=True)
+@click.option('--userspace', is_flag=True, help='Namespace based or cluster based access level')
+@click.option("--expiry-days", '-e', default=3650, help='Expiry days for certificate')
+def kube_user_config(api_server, api_server_port, pki_path, dry, cfssl_version, user, group, expiry_days, namespace, userspace):
+    '''Generate KUBECONFIG file which can be used to authenticate/authorize user with default cluster-admin role'''
+    api_server = f"https://{api_server}:{api_server_port}"
+    cfssl_url = f"https://github.com/cloudflare/cfssl/releases/download/v{cfssl_version}/cfssl_{cfssl_version}_linux_amd64"
+    cfssljson_url = f"https://github.com/cloudflare/cfssl/releases/download/v{cfssl_version}/cfssljson_{cfssl_version}_linux_amd64"
+    cfssl_certinfo_url = f"https://github.com/cloudflare/cfssl/releases/download/v{cfssl_version}/cfssl-certinfo_{cfssl_version}_linux_amd64"
+
+    req = {
+        'CN': user,
+        'hosts': [],
+        'key': {
+            'algo': 'rsa',
+            'size': 2048
+        },
+        'names': [{'O': group}]
+
+    }
+
+    ca_config = {
+        "signing": {
+            "default": {
+                "expiry": "87600h"
+            },
+            "profiles": {
+                "kubernetes": {
+                    "expiry": f"{expiry_days * 24}h",
+                    "usages": [
+                        "signing",
+                        "key encipherment",
+                        "server auth",
+                        "client auth"
+                    ]
+                }
+            }
+        }
+    }
+
+    script = f'''set -e
+if ! which cfssl; then
+    wget {cfssl_url} -O /usr/local/bin/cfssl
+    wget {cfssljson_url} -O /usr/local/bin/cfssljson
+    wget {cfssl_certinfo_url} -O /usr/local/bin/cfssl-certinfo
+    chmod a+x /usr/local/bin/cfssl*
+fi
+# Generate certificate
+echo '{json.dumps(ca_config)}' > ca-config.json
+echo '{json.dumps(req)}' | cfssl gencert -config=ca-config.json -ca={pki_path}/ca.crt -ca-key={pki_path}/ca.key -profile=kubernetes - | cfssljson -bare {user}
+
+# Setup conf file
+kubectl config set-cluster kubernetes \\
+    --certificate-authority={pki_path}/ca.crt \\
+    --embed-certs=true \\
+    --server={api_server} \\
+    --kubeconfig={user}.conf # output conf
+kubectl config set-credentials {user} \\
+    --client-certificate={user}.pem \\
+    --client-key={user}-key.pem \\
+    --embed-certs=true \\
+    --kubeconfig={user}.conf
+kubectl config set-context kubernetes \\
+    --cluster=kubernetes \\
+    --user={user} \\
+    --namespace={namespace} \\
+    --kubeconfig={user}.conf
+kubectl config use-context kubernetes --kubeconfig={user}.conf
+&>/dev/null kubectl create namespace {namespace} || true
+&>/dev/null kubectl delete rolebinding {user}-admin-binding || true
+&>/dev/null kubectl delete clusterrolebinding {user}-admin-binding || true
+kubectl create {"rolebinding" if userspace else "clusterrolebinding"} {user}-admin-binding --clusterrole=cluster-admin --user={user} --namespace={namespace} # --namespace is only useful for rolebinding
+echo
+'''
+    if dry:
+        print(script)
+        return
+    tmp_dir = tempfile.mkdtemp()
+    with switch_cwd(tmp_dir):
+        run_as_root(script, realtime=True)
+        click.echo(f'Done. Please check by running: KUBECONFIG={tmp_dir}/{user}.conf kubectl get all')

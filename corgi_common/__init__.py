@@ -116,18 +116,6 @@ def tabulate_print(data, mappings):
     print(tabulate(tabdata, headers=headers))
 
 
-@contextmanager
-def switch_cwd(new_cwd):
-    orig_cwd = os.getcwd()
-    logger.info(f"Switching CWD to [{new_cwd}]")
-    os.chdir(new_cwd)
-    try:
-        yield
-    finally:
-        logger.info(f"Switching CWD BACK to [{orig_cwd}]")
-        os.chdir(orig_cwd)
-
-
 class NoKeyboardInterrupt:
 
     def __enter__(self):
@@ -151,7 +139,7 @@ def pre_exec():
 def run_script(command, capture=False, realtime=False):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
-    print("$> " + command)
+    # print("$> " + command)
     preexec_options = {}
     if sys.platform.startswith('win'):
         # https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
@@ -218,3 +206,26 @@ def is_root():
 def bye(msg, rc=1):
     print(msg, file=sys.stderr)
     exit(rc)
+
+@contextmanager
+def switch_cwd(new_cwd):
+    orig_cwd = os.getcwd()
+    logger.info(f"Switching CWD to [{new_cwd}]")
+    os.chdir(new_cwd)
+    try:
+        yield
+    finally:
+        logger.info(f"Switching CWD BACK to [{orig_cwd}]")
+        os.chdir(orig_cwd)
+
+@contextmanager
+def switch_to_tmp_dir():
+    orig_cwd = os.getcwd()
+    new_cwd = tempfile.mkdtemp()
+    logger.info(f"Switching CWD to [{new_cwd}]")
+    os.chdir(new_cwd)
+    try:
+        yield
+    finally:
+        logger.info(f"Switching CWD BACK to [{orig_cwd}]")
+        os.chdir(orig_cwd)
