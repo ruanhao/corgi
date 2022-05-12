@@ -22,7 +22,7 @@ config = {
         'corgi_vcenter': ['*'],
         'corgi_aws': ['*'],
         'corgi_build': ['*'],
-        'corgi_configure': ['*'],
+        'corgi_configure': ['*', 'sh/*'],
     },
     'setup_requires': ['wheel'],
     'entry_points': {

@@ -98,7 +98,8 @@ def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, 
 
         # run_script(f'packer build -timestamp-ui -force {os_code}.json', realtime=True)
         script = f'''
-packer build -timestamp-ui -force {os_code}.json && echo "Build Sucess !"
+mkdir -p /tmp/packer_cache
+PACKER_CACHE_DIR=/tmp/packer_cache packer build -timestamp-ui -force {os_code}.json && echo "Build Sucess !"
 # Do compression
 rm -rf output/*.vdi
 if which VBoxManage; then
@@ -137,6 +138,8 @@ def _prepare_customize_script(username, no_swap):
 set -x
 sudo apt update
 sudo apt-get install python3-venv -y
+sudo apt install python3-pip -y
+sudo apt install python-is-python3 -y
 # sudo apt install ubuntu-desktop -y
 # sudo apt install vpnc -y
 # sudo apt install iperf3 -y

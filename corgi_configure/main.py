@@ -5,9 +5,15 @@ from corgi_common import config_logging, run_script, is_root, bye, as_root, swit
 import json
 import tempfile
 import logging
+from . import k8s
 
 config_logging('corgi_configure', logging.DEBUG)
 
+def _register_commands(module):
+    for a in dir(module):
+        f = getattr(module, a)
+        if isinstance(f, click.core.Command):
+            cli.add_command(f)
 
 @as_root
 def run_as_root(*args, **kwargs):
@@ -67,7 +73,7 @@ echo "{server}:{server_dir} {local_dir} nfs rw,hard,intr,rsize=8192,wsize=8192,t
 @click.option('--dry', is_flag=True)
 @click.option('--userspace', is_flag=True, help='Namespace based or cluster based access level')
 @click.option("--expiry-days", '-e', default=3650, help='Expiry days for certificate')
-def kube_user_config(api_server, api_server_port, pki_path, dry, cfssl_version, user, group, expiry_days, namespace, userspace):
+def k8s_user_conf(api_server, api_server_port, pki_path, dry, cfssl_version, user, group, expiry_days, namespace, userspace):
     '''Generate KUBECONFIG file which can be used to authenticate/authorize user with default cluster-admin role'''
     api_server = f"https://{api_server}:{api_server_port}"
     cfssl_url = f"https://github.com/cloudflare/cfssl/releases/download/v{cfssl_version}/cfssl_{cfssl_version}_linux_amd64"
@@ -145,3 +151,6 @@ echo
     with switch_cwd(tmp_dir):
         run_as_root(script, realtime=True)
         click.echo(f'Done. Please check by running: KUBECONFIG={tmp_dir}/{user}.conf kubectl get all')
+
+
+_register_commands(k8s)

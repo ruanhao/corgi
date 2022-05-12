@@ -13,6 +13,7 @@ from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pprint import pprint
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ def pre_exec():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def run_script(command, capture=False, realtime=False):
+def run_script(command, capture=False, realtime=False, opts=''):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
     # print("$> " + command)
@@ -148,7 +149,7 @@ def run_script(command, capture=False, realtime=False):
     else:
         preexec_options['preexec_fn'] = lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)
     process = subprocess.Popen(
-        ['/bin/bash', '-c', command],
+        ['/bin/bash', f'-c{opts}', command],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT if realtime else subprocess.PIPE if capture else subprocess.DEVNULL,
         encoding='utf-8',
@@ -229,3 +230,8 @@ def switch_to_tmp_dir():
     finally:
         logger.info(f"Switching CWD BACK to [{orig_cwd}]")
         os.chdir(orig_cwd)
+
+def assert_that(condition_to_fulfill, msg):
+    if not condition_to_fulfill:
+        traceback.print_stack()
+        bye(msg)
