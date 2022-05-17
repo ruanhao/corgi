@@ -17,14 +17,17 @@ def _get_script(name, values={}):
 
 
 @click.command(short_help="Bootstrap master node")
-@click.option("--kubernetes-version", default='1.23.6')
-@click.option("--pod-network", default='192.168.0.0/16')
-@click.option("--helm-version", default='3.8.2')
-@click.option("--metrics-server-version", default='0.6.1')
+@click.option("--kubernetes-version", default='1.23.6', show_default=True)
+@click.option("--pod-network", default='192.168.0.0/16', show_default=True)
+@click.option("--helm-version", default='3.8.2', show_default=True)
+@click.option("--metrics-server-version", default='0.6.1', show_default=True)
+@click.option('--cni-plugin', default='flannel', type=click.Choice(['flannel', 'calico']), help="CNI plugin", show_default=True)
+@click.option('--cross-subnet', is_flag=True, help="Always use VxLAN, aka use flannel/Directrouting or calico/VXLANCrossSubnet")
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_master(dry, **values):
     common_script = _get_script('k8s_bootstrap_common.sh', values)
     master_script = _get_script('k8s_bootstrap_master.sh', values)
+
     script = common_script + "\n" + master_script
     if dry:
         print(script)
@@ -33,7 +36,7 @@ def k8s_bootstrap_master(dry, **values):
 
 
 @click.command(short_help="Bootstrap worker node")
-@click.option("--kubernetes-version", default='1.23.6')
+@click.option("--kubernetes-version", default='1.23.6', show_default=True)
 @click.option("--ip", "master_ip", required=True, help='Master node global IP address')
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_worker(dry, **values):

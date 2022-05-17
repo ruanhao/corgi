@@ -7,6 +7,11 @@ METRICS_SERVER_VERSION=${METRICS_SERVER_VERSION:-0.6.1}
 HELM_VERSION=$helm_version
 HELM_VERSION=${HELM_VERSION:-3.4.2}
 
+CNI_PLUGIN=$cni_plugin
+CNI_PLUGIN=${CNI_PLUGIN:-flannel}
+
+CROSS_SUBNET=$cross_subnet
+
 # Initialize Kubernetes Cluster
 kubeadm init --kubernetes-version=v${KUBERNETES_VERSION} \
         --apiserver-advertise-address=0.0.0.0 \
@@ -22,11 +27,25 @@ kubeadm init --kubernetes-version=v${KUBERNETES_VERSION} \
 mkdir -p /root/.kube
 cp /etc/kubernetes/admin.conf /root/.kube/config
 
-# Deploy Calico network (maybe need a little treak, please refer to https://github.com/projectcalico/calico/issues/2561)
-# kubectl create -f https://docs.projectcalico.org/v3.9/manifests/calico.yaml
-# Deploy Flannel network (Directrouting is only suitable when all hosts locates in flat L2 network)
-curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml | \
-    sed "s|10.244.0.0/16|$POD_NETWORK|" | sed  's/"Type": "vxlan"/"Type": "vxlan", "Directrouting": true/' | kubectl apply -f -
+# Network configuration
+if [[ "$CNI_PLUGIN" = flannel ]]; then
+    if [[ "$CROSS_SUBNET" = True ]]; then
+        curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml | \
+            sed "s|10.244.0.0/16|$POD_NETWORK|" | kubectl apply -f -
+    else
+        # Deploy Flannel network (Directrouting is only suitable when all hosts locates in flat L2 network)
+        curl https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml | \
+            sed "s|10.244.0.0/16|$POD_NETWORK|" | sed  's/"Type": "vxlan"/"Type": "vxlan", "Directrouting": true/' | kubectl apply -f -
+    fi
+elif [[ "$CNI_PLUGIN" = calico ]]; then
+    kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+    if [[ "$CROSS_SUBNET" = True ]]; then
+        curl https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml | sed 's/VXLANCrossSubnet/VXLAN/' | kubectl apply -f -
+    else
+        kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
+    fi
+fi
+
 
 # Deploy metrics-server (can use `kubectl top` then)
 curl -L -s https://github.com/kubernetes-sigs/metrics-server/releases/download/v${METRICS_SERVER_VERSION}/components.yaml  | sed '/secure-port/ a \        - --kubelet-insecure-tls' | kubectl apply -f -
