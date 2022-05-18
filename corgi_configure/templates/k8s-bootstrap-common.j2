@@ -1,8 +1,8 @@
-KUBERNETES_VERSION=${kubernetes_version}
-KUBERNETES_VERSION=${KUBERNETES_VERSION:-1.23.6}
-
+# Define common variables
+KUBERNETES_VERSION={{ kubernetes_version }}
 APT_KUBERNETES_VERSION=${KUBERNETES_VERSION}-00
 
+# Install common packages
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install apt-transport-https ca-certificates curl software-properties-common -y

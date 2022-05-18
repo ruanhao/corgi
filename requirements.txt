@@ -3,3 +3,4 @@ click
 tabulate
 troposphere
 colorama
+jinja2

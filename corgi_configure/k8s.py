@@ -4,6 +4,7 @@ import os
 import json
 from string import Template
 import tempfile
+from jinja2 import Template, FileSystemLoader, Environment
 
 @as_root
 def _run_as_root(*args, **kwargs):
@@ -16,7 +17,39 @@ def _get_script(name, values={}):
         return Template(f.read()).safe_substitute(values)
 
 
+def _get_script_v2(template_filename, **values):
+    templates_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'templates')
+    env = Environment(loader=FileSystemLoader(templates_path), autoescape=True)
+    tmpl = env.get_template(template_filename)
+    return tmpl.render(**values)
+
+
+def _run(script, dry=False):
+    if dry:
+        print(script)
+        return
+    _run_as_root(script, realtime=True, opts='e')
+
 @click.command(short_help="Bootstrap master node")
+@click.option("--kubernetes-version", default='1.23.6', show_default=True)
+@click.option("--pod-network", default='192.168.0.0/16', show_default=True)
+@click.option("--helm-version", default='3.8.2', show_default=True)
+@click.option("--metrics-server-version", default='0.6.1', show_default=True)
+@click.option('--cni-plugin', default='flannel', type=click.Choice(['flannel', 'calico']), help="CNI plugin", show_default=True)
+@click.option('--cross-subnet', is_flag=True, help="Always use VxLAN, aka use flannel/Directrouting or calico/VXLANCrossSubnet")
+@click.option("--dry", is_flag=True)
+def k8s_bootstrap_master_node(dry, **values):
+    _run(_get_script_v2('k8s-bootstrap-master.j2', **values), dry)
+
+
+@click.command(short_help="Bootstrap worker node")
+@click.option("--kubernetes-version", default='1.23.6', show_default=True)
+@click.option("--ip", "master_ip", required=True, help='Master node global IP address')
+@click.option("--dry", is_flag=True)
+def k8s_bootstrap_worker_node(dry, **values):
+    _run(_get_script_v2('k8s-bootstrap-worker.j2', **values), dry)
+
+@click.command(short_help="Bootstrap master node", hidden=True)
 @click.option("--kubernetes-version", default='1.23.6', show_default=True)
 @click.option("--pod-network", default='192.168.0.0/16', show_default=True)
 @click.option("--helm-version", default='3.8.2', show_default=True)
@@ -35,7 +68,7 @@ def k8s_bootstrap_master(dry, **values):
     _run_as_root(script, realtime=True, opts='e')
 
 
-@click.command(short_help="Bootstrap worker node")
+@click.command(short_help="Bootstrap worker node", hidden=True)
 @click.option("--kubernetes-version", default='1.23.6', show_default=True)
 @click.option("--ip", "master_ip", required=True, help='Master node global IP address')
 @click.option("--dry", is_flag=True)
