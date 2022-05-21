@@ -1,12 +1,14 @@
 import click
 import logging
-import boto3
 import os
-from corgi_common import tabulate_print, bye, switch_to_tmp_dir, run_script, goodbye
+from corgi_common import bye, switch_to_tmp_dir, run_script, goodbye
 from troposphere import Ref
 from corgi_common.dateutils import YmdHMS
 from os.path import abspath
-from troposphere.serverless import Function, SERVERLESS_TRANSFORM, CloudWatchEvent, EventInvokeConfiguration, OnSuccess, OnFailure, DestinationConfiguration
+from troposphere.serverless import (
+    Function, SERVERLESS_TRANSFORM, CloudWatchEvent,
+    EventInvokeConfiguration, OnSuccess, OnFailure, DestinationConfiguration
+)
 from troposphere.sns import Topic
 from .common import cf_template
 from awacs.aws import Policy, Statement, Action
@@ -90,6 +92,7 @@ def create_function(name, lambda_function_file, requirements_file, dependencies,
             EventInvokeConfig=EventInvokeConfiguration(
                 DestinationConfig=DestinationConfiguration(
                     OnSuccess=OnSuccess(Destination=Ref('OnSuccess'), Type='SNS'),
+                    # OnFailure=OnFailure(Destination=Ref('OnFailure'), Type='SNS'),
                 )
             ),
         ),

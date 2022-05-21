@@ -5,6 +5,7 @@ from corgi_common import config_logging, pretty_print, bye
 from .ec2 import ec2
 from .iam import iam
 from .cf import cf
+from .s3 import s3
 from .route53 import route53
 from .lambda_ import lambda_
 from corgi_common.pathutils import get_local_file_path
@@ -70,6 +71,7 @@ cli.add_command(ec2)
 cli.add_command(cf)
 cli.add_command(route53)
 cli.add_command(iam)
+cli.add_command(s3)
 cli.add_command(lambda_, "lambda")
 
 
