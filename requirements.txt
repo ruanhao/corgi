@@ -4,3 +4,4 @@ tabulate
 troposphere
 colorama
 jinja2
+awacs

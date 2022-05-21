@@ -98,10 +98,31 @@ def json_print(data):
         try:
             print(json.dumps([dict(d) for d in data], indent=4))
         except Exception:
-            pprint([dict(d) for d in data])
+            try:
+                pprint([dict(d) for d in data])
+            except Exception:
+                print(data)
+    else:
+        print(data)
 
 
-def tabulate_print(data, mappings):
+def pretty_print(data, json_format=False, mappings=None, x=False):
+    if json_format or not mappings:
+        json_print(data)
+    else:
+        tabulate_print(data, mappings, x)
+
+def x_print(records, headers):
+    headers = list(headers)
+    left_max_len = max(len(max(headers, key=len)), len(f"-[ RECORD {len(records)} ]-")) + 1
+    right_max_len = max(len(max(record, key=lambda item: len(str(item)))) for record in records) + 1
+    for i, record in enumerate(records, 1):
+        print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
+        for j, v in enumerate(record):
+            print(f'{headers[j]}'.ljust(left_max_len) + '| ' + str(v).ljust(right_max_len))
+
+
+def tabulate_print(data, mappings, x=False):
     headers = mappings.keys()
     tabdata = []
     for item in data:
@@ -114,8 +135,27 @@ def tabulate_print(data, mappings):
             else:
                 attrs.append(get(item, k))
         tabdata.append(attrs)
-    print(tabulate(tabdata, headers=headers))
+    if x:
+        x_print(tabdata, headers)
+    else:
+        print(tabulate(tabdata, headers=headers))
 
+def tabulate_numbered_print(data, mappings):
+    mappings = {'No': '_no', **mappings}
+    headers = mappings.keys()
+    tabdata = []
+    for idx, item in enumerate(data, start=1):
+        attrs = []
+        item['_no'] = idx
+        for h in headers:
+            k = mappings[h]
+            if isinstance(k, tuple):
+                (k0, func) = k
+                attrs.append(func(get(item, k0)))
+            else:
+                attrs.append(get(item, k))
+        tabdata.append(attrs)
+    print(tabulate(tabdata, headers=headers))
 
 class NoKeyboardInterrupt:
 
@@ -137,10 +177,12 @@ def pre_exec():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def run_script(command, capture=False, realtime=False, opts=''):
+def run_script(command, capture=False, realtime=False, opts='', dry=False):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
-    # print("$> " + command)
+    if dry:
+        print(command)
+        return
     preexec_options = {}
     if sys.platform.startswith('win'):
         # https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863(v=vs.85).aspx
@@ -207,6 +249,12 @@ def is_root():
 def bye(msg, rc=1):
     print(msg, file=sys.stderr)
     exit(rc)
+
+def goodbye(msg=None):
+    if msg:
+        print(msg)
+    exit()
+
 
 @contextmanager
 def switch_cwd(new_cwd):

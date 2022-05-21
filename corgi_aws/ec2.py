@@ -86,7 +86,9 @@ def ec2():
 @click.option('--instance-type',  default='c5.xlarge')
 @click.option('--volume', type=int, default=60)
 @click.option('--keypair', required=True, envvar="AWS_KEYPAIR", help='Use a key pair to securely connect instance')
-def launch_instance(image_id, stack_name, instance_num, instance_type, volume, keypair):
+@click.option('--dry', is_flag=True)
+@click.option('--json', 'json_format', is_flag=True)
+def launch_instance(image_id, stack_name, instance_num, instance_type, volume, keypair, dry, json_format):
     assert_no_name_collision(stack_name)
     vpc_id = default_vpc_id()
     info(f"Default VPC: {vpc_id}")
@@ -103,6 +105,7 @@ def launch_instance(image_id, stack_name, instance_num, instance_type, volume, k
     security_group_name = f"SecurityGroupForStack{stack_name}"
 
     t = Template()
+    t.set_version("2010-09-09")
 
     security_group_rules = []
     security_group_rules.append(SecurityGroupRule(
@@ -113,6 +116,12 @@ def launch_instance(image_id, stack_name, instance_num, instance_type, volume, k
     ))
     security_group_rules.append(SecurityGroupRule(
         IpProtocol='tcp',
+        CidrIp='0.0.0.0/0',
+        FromPort=1,
+        ToPort=65535
+    ))
+    security_group_rules.append(SecurityGroupRule(
+        IpProtocol='udp',
         CidrIp='0.0.0.0/0',
         FromPort=1,
         ToPort=65535
@@ -197,12 +206,18 @@ def launch_instance(image_id, stack_name, instance_num, instance_type, volume, k
             Value=Ref(sg),
         )
     ])
+    if dry:
+        if json_format:
+            print(t.to_json())
+        else:
+            print(t.to_yaml())
+        exit()
+    info(f"Creating stack [{stack_name}] ...")
     cf_client.create_stack(
         StackName=stack_name,
         TemplateBody=t.to_yaml(),
         Tags=[{'Key': 'creator', 'Value': 'haoru'}]
     )
-    info(f"Creating stack [{stack_name}] ...")
     cf_client.get_waiter('stack_create_complete').wait(StackName=stack_name)
     info("Stack creation completed")
     click.echo("===========")

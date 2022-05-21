@@ -1,5 +1,8 @@
 import boto3
 import logging
+from troposphere import Template
+from collections.abc import Iterable
+
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +78,28 @@ def latest_linux2_ami():
 
 def ami_name(ami):
     return boto3.client('ec2').describe_images(ImageIds=[ami])['Images'][0]['Name']
+
+def _add_resources_to_template(t, items):
+    if items and isinstance(items, Iterable):
+        for item in items:
+            t.add_resource(item)
+
+def _add_outputs_to_template(t, items):
+    if items and isinstance(items, Iterable):
+        for item in items:
+            t.add_output(item)
+
+
+def _add_parameters_to_template(t, items):
+    if items and isinstance(items, Iterable):
+        for item in items:
+            t.add_parameter(item)
+
+def cf_template(version='2010-09-09', description='', resources=None, outputs=None, parameters=None):
+    t = Template()
+    t.set_version("2010-09-09")
+    t.set_description(description)
+    _add_resources_to_template(t, resources)
+    _add_outputs_to_template(t, outputs)
+    _add_parameters_to_template(t, parameters)
+    return t
