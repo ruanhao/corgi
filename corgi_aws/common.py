@@ -95,11 +95,19 @@ def _add_parameters_to_template(t, items):
         for item in items:
             t.add_parameter(item)
 
-def cf_template(version='2010-09-09', description='', resources=None, outputs=None, parameters=None):
+def _add_conditions_to_template(t, conditions):
+    if not conditions:
+        return
+    for k in conditions:
+        t.add_condition(k, conditions[k])
+
+
+def cf_template(version='2010-09-09', description='', resources=None, outputs=None, parameters=None, conditions=None):
     t = Template()
     t.set_version("2010-09-09")
     t.set_description(description)
     _add_resources_to_template(t, resources)
     _add_outputs_to_template(t, outputs)
     _add_parameters_to_template(t, parameters)
+    _add_conditions_to_template(t, conditions)
     return t

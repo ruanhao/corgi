@@ -4,7 +4,7 @@ import click
 import logging
 from corgi_common import as_root
 from corgi_common.loggingutils import info, config_logging
-from corgi_common.scriptutils import run_script_live
+from corgi_common.scriptutils import run_script_as_root_live
 import os
 
 config_logging('corgi_gauge', logging.DEBUG)
@@ -18,7 +18,6 @@ def cli():
 def io():
     pass
 
-@as_root
 @io.command(help='Test block-level reads and writes performance')
 @click.option("--partition", '-p', default='/tmp', help='The partition under which to test')
 @click.option("--bs", default='1M')
@@ -35,7 +34,7 @@ echo 3 | tee /proc/sys/vm/drop_caches
 echo "=> Read performance testing ..."
 dd if={tempfile_path} of=/dev/null bs={bs} count={count}
 '''
-    run_script_live(script, dry=dry)
+    run_script_as_root_live(script, dry=dry)
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import click
 from corgi_common import config_logging, run_script, is_root, bye, as_root, switch_cwd
+from corgi_common.scriptutils import run_script_as_root_live
 import json
 import tempfile
 import logging
@@ -22,6 +23,18 @@ def run_as_root(*args, **kwargs):
 @click.group(help="Handy scripts")
 def cli():
     pass
+
+@cli.command()
+@click.option('--device', '-d', required=True, help='Specify block device')
+@click.option('--mountpoint', '-m', required=True)
+@click.option('--filesystem', '-fs', default='ext4', show_default=True)
+@click.option('--dry', is_flag=True)
+def mkfs_and_mount(dry, device, mountpoint, filesystem):
+    script = f'''mkfs -t {filesystem} {device}
+mkdir -p {mountpoint}
+mount {device} {mountpoint}
+'''
+    run_script_as_root_live(script, dry=dry)
 
 @cli.command()
 @click.option('--dry', is_flag=True)
