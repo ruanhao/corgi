@@ -1,10 +1,10 @@
 import click
-from corgi_common import run_script, bye, as_root, switch_cwd, _chain_get, assert_that
+from corgi_common import run_script, as_root, _chain_get, assert_that
 import os
 import json
 from string import Template
 import tempfile
-from jinja2 import Template, FileSystemLoader, Environment
+from jinja2 import FileSystemLoader, Environment
 
 @as_root
 def _run_as_root(*args, **kwargs):

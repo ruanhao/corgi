@@ -111,3 +111,11 @@ def cf_template(version='2010-09-09', description='', resources=None, outputs=No
     _add_parameters_to_template(t, parameters)
     _add_conditions_to_template(t, conditions)
     return t
+
+def decide_username(imageName):
+    imageName = imageName.lower()
+    if "cisco" in imageName or 'findit' in imageName:
+        return 'cisco'
+    if "ubuntu" in imageName:
+        return 'ubuntu'
+    return 'ec2-user'

@@ -1,0 +1,44 @@
+#!/bin/bash -x
+
+&>/tmp/user-data.log bash -ex <<"TRY"
+    if which yum 2>/dev/null; then
+        yum update -y
+        yum install nc python3-pip -y
+    fi
+    if which apt 2>/dev/null; then
+        apt update -y
+        apt install netcat python3-pip -y
+{% if efs %}
+        apt install nfs-common -y
+{% endif %}
+    fi
+    pip3 install  https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+{% if efs %}
+    # wait until EFS file system is available
+    for _ in {1..60}; do # 10 minutes at most
+        nc -w 1 -z ${FileSystem}.efs.${AWS::Region}.amazonaws.com 2049 && break || sleep 10
+    done
+    # while ! nc -z ${FileSystem}.efs.${AWS::Region}.amazonaws.com 2049; do sleep 10; done
+    sleep 10
+    mkdir -p /mnt/share
+    # mount EFS file system
+    echo "${FileSystem}.efs.${AWS::Region}.amazonaws.com:/ /mnt/share nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,_netdev 0 0" >>/etc/fstab
+    mount -a
+{% endif %}
+    cat <<EOF >>/root/.inputrc
+"\C-p": history-search-backward
+"\C-n": history-search-forward
+EOF
+    cat <<EOF >>/root/.bashrc
+alias ..='cd ..'
+alias ...='.2'
+alias ll='ls -lrth'
+export TMOUT=0
+EOF
+TRY
+{% if debug %}
+true
+{% endif %}
+RETVAL=$?
+cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region} && exit
+/opt/aws/bin/cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region}

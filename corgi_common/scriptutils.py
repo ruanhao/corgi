@@ -1,5 +1,6 @@
 from . import run_script as _run_script, is_root, bye
 from functools import partial
+import subprocess
 
 
 run_script = _run_script
@@ -13,3 +14,7 @@ def run_script_as_root_live(script, dry=False):
     if not is_root():
         bye('The script needs to be run as root.')
     _run_script(script, realtime=True)
+
+def write_to_clipboard(output):
+    process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
+    process.communicate(output.encode())
