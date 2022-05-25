@@ -5,3 +5,4 @@ troposphere
 colorama
 jinja2
 awacs
+redis==3.5.3

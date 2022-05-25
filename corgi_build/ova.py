@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 from string import Template
+from corgi_common.jinja2utils import get_rendered
 from corgi_common import run_script, switch_cwd
 
 logger = logging.getLogger(__name__)
@@ -68,18 +69,19 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
 
 
 @click.command(help="Build Ubuntu")
-@click.option('--cpu', '-c', default=4, help="CPU count")
-@click.option('--memory', '-m', default=1024, type=int, help="Memory (MB)")
-@click.option('--disk', '-d', default=80, type=int, help="Disk size (GB)")
+@click.option('--cpu', '-c', default=4, help="CPU count", show_default=True)
+@click.option('--memory', '-m', default=1024, type=int, help="Memory (MB)", show_default=True)
+@click.option('--disk', '-d', default=80, type=int, help="Disk size (GB)", show_default=True)
 @click.option('--swap', type=int, help="Swap size (MB)")
-@click.option('--os', "os_code", default='focal', type=click.Choice(['focal']), help="OS code")
+@click.option('--os', "os_code", default='focal', type=click.Choice(['focal']), help="OS code", show_default=True)
 @click.option('--name', help="OVA filename")
-@click.option('--version', default='1.0.0', help="Version")
-@click.option('--username', default='cisco', help="Login username")
-@click.option('--password', default='cisco', help="Login password")
+@click.option('--version', default='1.0.0', help="Version", show_default=True)
+@click.option('--redis-version', help="Install redis")
+@click.option('--username', default='cisco', help="Login username", show_default=True)
+@click.option('--password', default='cisco', help="Login password", show_default=True)
 @click.option('--dry', is_flag=True, help="Show script without running")
 @click.option('--no-swap', is_flag=True, help="Disable swap")
-def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, dry, no_swap):
+def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, dry, no_swap, redis_version):
     if not swap:
         swap = int(memory / 2)
     if not name:
@@ -94,7 +96,11 @@ def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, 
         _prepare_preseed_cfg(username, password, swap, os_code)
         _prepare_packer_json(os_code, username, password, name, version, cpu, disk, memory)
         _prepare_ovf(name, os_code, memory, cpu, disk, version)
-        _prepare_customize_script(username, no_swap)
+        _prepare_customize_script(
+            username=username,
+            no_swap=no_swap,
+            redis_version=redis_version
+        )
 
         # run_script(f'packer build -timestamp-ui -force {os_code}.json', realtime=True)
         script = f'''
@@ -131,61 +137,9 @@ cd {os.getcwd()};
             # run_script("ping -c 5 www.baidu.com", realtime=True)
 
 
-def _prepare_customize_script(username, no_swap):
-    logger.info("Creating customizing script ...")
-    script = """
-# basic
-set -x
-sudo apt update
-sudo apt-get install python3-venv -y
-sudo apt install python3-pip -y
-sudo apt install python-is-python3 -y
-# sudo apt install ubuntu-desktop -y
-# sudo apt install vpnc -y
-# sudo apt install iperf3 -y
-
-cat <<EOF | tee $HOME/.inputrc | sudo tee /root/.inputrc
-"\C-p": history-search-backward
-"\C-n": history-search-forward
-EOF
-sudo chmod a+wr $HOME/.inputrc
-
-cat <<EOF | sudo tee -a /etc/sudoers
-{username} ALL=(ALL) NOPASSWD: ALL
-EOF
-
-cat <<EOF | sudo tee -a /etc/sudoers
-cisco ALL=(ALL) NOPASSWD: ALL
-EOF
-
-cat <<EOF | tee -a $HOME/.bashrc | sudo tee -a /root/.bashrc
-export TMOUT=0
-alias ..='cd ..'
-alias ...='.2'
-EOF
-
-# network
-sudo -E bash <<EOF
-echo "Create netplan config for eth0"
-cat <<EOF2 >/etc/netplan/01-netcfg.yaml;
-network:
-  version: 2
-  ethernets:
-    eth0:
-      dhcp4: true
-      # dhcp6: true
-EOF2
-
-# Disable Predictable Network Interface names and use eth0
-sed -i 's/en[[:alnum:]]*/eth0/g' /etc/network/interfaces;
-sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 \1"/g' /etc/default/grub;
-update-grub;
-
-EOF
-"""
-    if no_swap:
-        script += """sudo swapoff -a && sudo sed -i '/ swap / s/^\\(.*\\)$/# \\1/g' /etc/fstab
-"""
+def _prepare_customize_script(**values):
+    logger.info(f"Creating customizing script ... {values}")
+    script = get_rendered('customize.j2', **values)
     with open('customize.sh', 'w') as f:
         f.write(script)
 

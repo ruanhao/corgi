@@ -63,7 +63,14 @@ class NonBlockingStreamReader:
         self._s.close()
 
 
-def config_logging(name, level=logging.INFO):
+def config_logging(name, level=None):
+    if not level:
+        level = logging.INFO
+        for option in ('-v', '--verbose', '--debug'):
+            if option in sys.argv:
+                level = logging.DEBUG
+                sys.argv.remove(option)
+                break
     logging.basicConfig(
         handlers=[
             RotatingFileHandler(

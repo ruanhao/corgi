@@ -2,18 +2,20 @@
 # -*- coding: utf-8 -*-
 import click
 from corgi_common import config_logging
-import logging
 from .ova import ova
-
-config_logging('corgi_build', logging.DEBUG)
 
 @click.group(help="Build utils")
 def cli():
     pass
 
 
-if __name__ == '__main__':
+def main():
+    config_logging('corgi_build')
+
+    cli.add_command(ova)
+
     cli()
 
 
-cli.add_command(ova)
+if __name__ == '__main__':
+    main()

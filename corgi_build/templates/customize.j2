@@ -1,0 +1,64 @@
+# basic
+set -x
+sudo apt update
+sudo apt-get install python3-venv -y
+sudo apt install python3-pip -y
+sudo apt install python-is-python3 -y
+# sudo apt install ubuntu-desktop -y
+# sudo apt install vpnc -y
+# sudo apt install iperf3 -y
+
+cat <<EOF | tee $HOME/.inputrc | sudo tee /root/.inputrc
+"\C-p": history-search-backward
+"\C-n": history-search-forward
+EOF
+sudo chmod a+wr $HOME/.inputrc
+
+cat <<EOF | sudo tee -a /etc/sudoers
+{{ username }} ALL=(ALL) NOPASSWD: ALL
+EOF
+
+cat <<EOF | sudo tee -a /etc/sudoers
+cisco ALL=(ALL) NOPASSWD: ALL
+EOF
+
+cat <<EOF | tee -a $HOME/.bashrc | sudo tee -a /root/.bashrc
+export TMOUT=0
+alias ..='cd ..'
+alias ...='.2'
+EOF
+
+# network
+sudo -E bash <<EOF
+echo "Create netplan config for eth0"
+cat <<EOF2 >/etc/netplan/01-netcfg.yaml;
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      # dhcp6: true
+EOF2
+
+# Disable Predictable Network Interface names and use eth0
+sed -i 's/en[[:alnum:]]*/eth0/g' /etc/network/interfaces;
+sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0 \1"/g' /etc/default/grub;
+update-grub;
+
+EOF
+
+{% if no_swap %}
+sudo swapoff -a && sudo sed -i '/ swap / s/^\\(.*\\)$/# \\1/g' /etc/fstab
+{% endif %}
+
+{% if redis_version %}
+sudo mkdir -p /opt
+(
+    cd /opt
+    sudo wget https://download.redis.io/releases/redis-{{redis_version}}.tar.gz
+    sudo tar xzf redis-{{redis_version}}.tar.gz
+    sudo ln -s redis-{{redis_version}} redis
+    cd redis
+    sudo make && sudo make install
+)
+{% endif %}

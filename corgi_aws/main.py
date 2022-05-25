@@ -6,19 +6,16 @@ from .ec2 import ec2
 from .iam import iam
 from .cf import cf
 from .s3 import s3
+from .sqs import sqs
 from .route53 import route53
 from .lambda_ import lambda_
 from corgi_common.pathutils import get_local_file_path
-import logging
 from .common import check_aws_credential
 from requests import get
 import json
 
-config_logging('corgi_aws', logging.DEBUG)
-
 # Or can just click in the GUI: https://awspolicygen.s3.amazonaws.com/policygen.html
 AWS_POLICIES_FILE_URL = 'https://awspolicygen.s3.amazonaws.com/js/policies.js'
-
 
 def __get_policies():
     try:
@@ -72,8 +69,13 @@ cli.add_command(cf)
 cli.add_command(route53)
 cli.add_command(iam)
 cli.add_command(s3)
+cli.add_command(sqs)
 cli.add_command(lambda_, "lambda")
+
+def main():
+    config_logging('corgi_aws')
+    cli()
 
 
 if __name__ == '__main__':
-    cli()
+    main()

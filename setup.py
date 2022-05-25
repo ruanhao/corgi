@@ -20,18 +20,19 @@ config = {
     # 'include_package_data': True, # use this option together with a MANIFEST.in
     'package_data': {
         'corgi_vcenter': ['*'],
-        'corgi_aws': ['*'],
-        'corgi_build': ['*'],
-        'corgi_configure': ['*', 'sh/*'],
+        'corgi_aws': ['*', 'templates/*'],
+        'corgi_build': ['*', 'templates/*'],
+        'corgi_configure': ['*', 'sh/*', 'templates/*'],
     },
     'setup_requires': ['wheel'],
     'entry_points': {
         'console_scripts': [
             'corgi_vcenter = corgi_vcenter.main:cli',
-            'corgi_aws = corgi_aws.main:cli',
-            'corgi_build = corgi_build.main:cli',
+            'corgi_aws = corgi_aws.main:main',
+            'corgi_build = corgi_build.main:main',
             'corgi_configure = corgi_configure.main:cli',
             'corgi_gauge = corgi_gauge.main:cli',
+            'corgi_redis = corgi_redis.main:main',
         ]
     },
 }
