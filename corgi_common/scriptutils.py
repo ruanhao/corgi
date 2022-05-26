@@ -7,6 +7,14 @@ run_script = _run_script
 run_script_live = partial(_run_script, realtime=True, opts='e')
 run_script_dry = partial(_run_script, dry=True)
 
+def try_run_script_as_root(script, dry=False, **kwargs):
+    if dry:
+        _run_script(script, dry=True)
+        return
+    if not is_root():
+        raise Exception("Not root.")
+    return _run_script(script, **kwargs)
+
 def run_script_as_root_live(script, dry=False):
     if dry:
         _run_script(script, realtime=True, dry=True)

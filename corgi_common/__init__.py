@@ -94,8 +94,8 @@ def _chain_get(data, chain, default=None):
     return result.get(attrs[-1], default)
 
 
-def get(obj, key):
-    return _chain_get(obj, key, 'N/A')
+def get(obj, key, default='n/a'):
+    return _chain_get(obj, key, default)
 
 
 def json_print(data):
