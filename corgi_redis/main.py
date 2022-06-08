@@ -46,6 +46,13 @@ def _get_cluster_metrics(host, port, password):
     if cluster_slots_fail != 0:
         cluster_slots_fail = _color(cluster_slots_fail)
 
+    cluster_stats_messages_fail_sent = int(get(cluster_stats, 'cluster_stats_messages_fail_sent', 0))
+    cluster_stats_messages_fail_received = int(get(cluster_stats, 'cluster_stats_messages_fail_received', 0))
+    if cluster_stats_messages_fail_sent > 0:
+        cluster_stats_messages_fail_sent = _color(cluster_stats_messages_fail_sent)
+    if cluster_stats_messages_fail_received > 0:
+        cluster_stats_messages_fail_received = _color(cluster_stats_messages_fail_received)
+
     cat = 'CLUSTER'
     return [
         {
@@ -76,6 +83,18 @@ def _get_cluster_metrics(host, port, password):
             'metric': 'cluster_slots_fail',
             'value': cluster_slots_fail,
             'desc': 'There MUST be some unreachable node(s)',
+            'category': cat,
+        },
+        {
+            'metric': 'cluster_stats_messages_fail_sent',
+            'value': cluster_stats_messages_fail_sent,
+            'desc': 'This node judged that there are node(s) down ever',
+            'category': cat,
+        },
+        {
+            'metric': 'cluster_stats_messages_fail_received',
+            'value': cluster_stats_messages_fail_received,
+            'desc': 'This node was told that there are node(s) down ever',
             'category': cat,
         },
     ]

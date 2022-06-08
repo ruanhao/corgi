@@ -323,7 +323,7 @@ def launch_instances(
                 CreationPolicy=CreationPolicy(
                     ResourceSignal=ResourceSignal(Timeout="PT15M")
                 ),
-                DependsOn=['MountTarget'] if efs else None,
+                DependsOn=['MountTarget'] if efs else [],
             ),
             Volume(             # additional volume
                 f"Volume{i}",

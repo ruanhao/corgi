@@ -20,6 +20,7 @@ config = {
     # 'include_package_data': True, # use this option together with a MANIFEST.in
     'package_data': {
         'corgi_vcenter': ['*'],
+        'corgi_misc': ['*'],
         'corgi_aws': ['*', 'templates/*'],
         'corgi_build': ['*', 'templates/*'],
         'corgi_configure': ['*', 'sh/*', 'templates/*'],
@@ -33,6 +34,7 @@ config = {
             'corgi_configure = corgi_configure.main:cli',
             'corgi_gauge = corgi_gauge.main:cli',
             'corgi_redis = corgi_redis.main:main',
+            'corgi_misc = corgi_misc.main:main',
         ]
     },
 }
