@@ -113,23 +113,24 @@ def json_print(data):
         print(data)
 
 
-def pretty_print(data, json_format=False, mappings=None, x=False):
+def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True):
     if json_format or not mappings:
         json_print(data)
     else:
-        tabulate_print(data, mappings, x)
+        tabulate_print(data, mappings, x, offset, header)
 
-def x_print(records, headers):
+def x_print(records, headers, offset=0, header=True):
     headers = list(headers)
-    left_max_len = max(len(max(headers, key=len)), len(f"-[ RECORD {len(records)} ]-")) + 1
-    right_max_len = max(len(max(record, key=lambda item: len(str(item)))) for record in records) + 1
-    for i, record in enumerate(records, 1):
-        print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
+    left_max_len = max(len(max(headers, key=len)), len(f"-[ RECORD {len(records) + offset} ]-")) + 1
+    right_max_len = max(len(str(max(record, key=lambda item: len(str(item))))) for record in records) + 1
+    for i, record in enumerate(records, 1 + offset):
+        if header:
+            print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
         for j, v in enumerate(record):
             print(f'{headers[j]}'.ljust(left_max_len) + '| ' + str(v).ljust(right_max_len))
 
 
-def tabulate_print(data, mappings, x=False):
+def tabulate_print(data, mappings, x=False, offset=0, header=True):
     headers = mappings.keys()
     tabdata = []
     for item in data:
@@ -143,7 +144,7 @@ def tabulate_print(data, mappings, x=False):
                 attrs.append(get(item, k))
         tabdata.append(attrs)
     if x:
-        x_print(tabdata, headers)
+        x_print(tabdata, headers, offset, header)
     else:
         print(tabulate(tabdata, headers=headers))
 
