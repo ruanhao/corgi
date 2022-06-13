@@ -85,6 +85,8 @@ def config_logging(name, level=None):
 
 
 def _chain_get(data, chain, default=None):
+    if not chain:
+        return data
     attrs = chain.split('.')
     if len(attrs) == 1:
         return data.get(attrs[0], default)
@@ -95,7 +97,10 @@ def _chain_get(data, chain, default=None):
 
 
 def get(obj, key, default='n/a'):
-    return _chain_get(obj, key, default)
+    try:
+        return _chain_get(obj, key, default)
+    except Exception:
+        return default
 
 
 def json_print(data):
