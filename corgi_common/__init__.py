@@ -16,8 +16,18 @@ from pprint import pprint
 import traceback
 
 logger = logging.getLogger(__name__)
+debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 nbsr_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='nbsr')
+
+
+def _log_and_print(output, pretty=False):
+    # if debug:
+    #     logger.debug(f'{output}'.rstrip())
+    if pretty:
+        pprint(output)
+    else:
+        print(output)
 
 class UnexpectedEndOfStream(Exception): pass
 
@@ -105,24 +115,24 @@ def get(obj, key, default='n/a'):
 
 def json_print(data):
     if isinstance(data, dict):
-        print(json.dumps(data, indent=4))
+        _log_and_print(json.dumps(data, indent=4))
     elif isinstance(data, list):
         try:
-            print(json.dumps([dict(d) for d in data], indent=4))
+            _log_and_print(json.dumps([dict(d) for d in data], indent=4))
         except Exception:
             try:
-                pprint([dict(d) for d in data])
+                _log_and_print([dict(d) for d in data], True)
             except Exception:
-                print(data)
+                _log_and_print(data)
     else:
-        print(data)
+        _log_and_print(data)
 
 
-def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True):
-    if json_format or not mappings:
+def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True, tf='simple', raw=False):
+    if json_format is True:
         json_print(data)
     else:
-        tabulate_print(data, mappings, x, offset, header)
+        return tabulate_print(data, mappings, x, offset, header, tf=tf, raw=raw)
 
 def x_print(records, headers, offset=0, header=True):
     headers = list(headers)
@@ -130,12 +140,15 @@ def x_print(records, headers, offset=0, header=True):
     right_max_len = max(len(str(max(record, key=lambda item: len(str(item))))) for record in records) + 1
     for i, record in enumerate(records, 1 + offset):
         if header:
-            print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
+            _log_and_print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
         for j, v in enumerate(record):
-            print(f'{headers[j]}'.ljust(left_max_len) + '| ' + str(v).ljust(right_max_len))
+            _log_and_print(f'{headers[j]}'.ljust(left_max_len) + '| ' + str(v).ljust(right_max_len))
 
 
-def tabulate_print(data, mappings, x=False, offset=0, header=True):
+def tabulate_print(data, mappings, x=False, offset=0, header=True, tf='simple', raw=False):
+    if not mappings:
+        ks = data[0].keys()
+        mappings = dict(zip(ks, ks))
     headers = mappings.keys()
     tabdata = []
     for item in data:
@@ -151,7 +164,10 @@ def tabulate_print(data, mappings, x=False, offset=0, header=True):
     if x:
         x_print(tabdata, headers, offset, header)
     else:
-        print(tabulate(tabdata, headers=headers))
+        output = tabulate(tabdata, headers=headers if header else (), tablefmt=tf)
+        if raw:
+            return output
+        _log_and_print(output)
 
 def tabulate_numbered_print(data, mappings):
     mappings = {'No': '_no', **mappings}
@@ -168,7 +184,7 @@ def tabulate_numbered_print(data, mappings):
             else:
                 attrs.append(get(item, k))
         tabdata.append(attrs)
-    print(tabulate(tabdata, headers=headers))
+    _log_and_print(tabulate(tabdata, headers=headers))
 
 class NoKeyboardInterrupt:
 
@@ -194,7 +210,7 @@ def run_script(command, capture=False, realtime=False, opts='', dry=False):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
     if dry:
-        print(command)
+        _log_and_print(command)
         return
     preexec_options = {}
     if sys.platform.startswith('win'):
@@ -260,11 +276,14 @@ def is_root():
     return getpass.getuser() == 'root'
 
 def bye(msg, rc=1):
+    logger.error(f"See ya [{rc}]: {msg}")
     print(msg, file=sys.stderr)
     exit(rc)
 
 def goodbye(msg=None):
+    logger.info("Bye bye")
     if msg:
+        logger.info(f"Bye bye: {msg}")
         print(msg)
     exit()
 

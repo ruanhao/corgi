@@ -3,7 +3,7 @@
 import click
 import json
 from corgi_common import config_logging, pretty_print, get, bye
-from corgi_common.dateutils import pretty_duration
+from corgi_common.dateutils import pretty_duration, now
 import logging
 import pika
 import sys
@@ -195,7 +195,7 @@ def tap(host, port, username, password, vhost, exchange, route_key):
             logger.error(f"Failed to dump json content: {e}")
             msg = msg0
             pass
-        header = f'-[ RECORD {count} ]-'.ljust(80, '-')
+        header = f'-[ RECORD {count} {now()} ]-'.ljust(100, '-')
         output = f'{header}\n{msg}'
         print(output, flush=True)
         sys.stdout.flush()

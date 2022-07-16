@@ -3,14 +3,20 @@
 import click
 from os.path import isfile
 import sys
-from corgi_common import config_logging, pretty_print, get, bye, as_root
+from corgi_common import config_logging, pretty_print, bye, as_root, is_root, goodbye
 from corgi_common.scriptutils import run_script
+from corgi_common.textutils import extract
 import logging
+import time
+from datetime import datetime
 import psutil
-import select
-from pprint import pprint
 
 logger = logging.getLogger(__name__)
+
+max_heap = None
+native_mem_track = False
+
+ARENA_CHUNK_SIZE = 65536
 
 def info(msg):
     print(msg)
@@ -37,7 +43,129 @@ def _compress(s, length=30):
         return str(s)
     return str(s)[:length] + "..."
 
-@cli.command(help='Print class histogram')
+@cli.command(help='Print VM flags (-XX:)', name='VM.flags')
+@click.argument('pid', type=int, required=True)
+@click.option('--jcmd', '-j', default='jcmd', show_default=True)
+def vm_flags(pid, jcmd):
+    _check_jcmd(jcmd)
+    output = _run_script(f"{jcmd} {pid} VM.flags")
+    for line in output.splitlines()[1].split():
+        if line.strip():
+            print(line)
+
+def _is_native_memory_track_enabled(pid):
+    output = _run_script(f'jinfo -flags {pid}')
+    return 'NativeMemoryTracking' in output
+
+def _to_bytes(text):
+    if text.endswith('KB') or text.endswith('kb') or text.endswith('MB') or text.endswith('mb') or text.endswith('GB') or text.endswith('gb'):
+        text = text[0:-1]
+    unit = text[-1]
+    value = int(text[0:-1])
+    if unit in ('B', 'b'):
+        return value
+    if unit in ('K', 'k'):
+        return value * 1024
+    if unit in ('M', 'm'):
+        return value * 1024 * 1024
+    if unit in ('G', 'g'):
+        return value * 1024 * 1024 * 1024
+    return int(text)
+
+def _numeric(text):
+    try:
+        f = float(text)
+        if f.is_integer():
+            return int(f)
+        return f
+    except Exception:
+        return 'nan'
+
+def _gcutil_metric(pid):
+    """https://github.com/frohoff/jdk8u-dev-jdk/blob/master/src/share/classes/sun/tools/jstat/resources/jstat_options"""
+    output = _run_script(f"jstat -gcutil {pid}")
+    logger.info("\n" + output)
+    lines = output.splitlines()
+    headers = lines[0].split()
+    values = [_numeric(v) for v in lines[1].split()]
+    d = dict(zip(headers, values))
+    logger.info(d)
+    return d
+
+
+def _fetch_metric(pid):
+    global max_heap
+    # thread_count = int(_run_script(f'jcmd {pid} Thread.print -l -e | grep "java.lang.Thread.State" | wc -l'))
+
+    thread_count = int(_run_script(f'jcmd {pid} PerfCounter.print | grep java.threads.live=').split('=')[1])
+    thread_count_peak = int(_run_script(f'jcmd {pid} PerfCounter.print | grep java.threads.livePeak=').split('=')[1])
+    used_heap = _to_bytes(_run_script(f"jcmd {pid} GC.heap_info | grep heap | grep -o 'used [^ ]*'").split()[1])
+    max_heap = max_heap or _to_bytes(_run_script(f"jinfo -flags {pid} | grep -o 'MaxHeapSize=[^ ]*'").split('=')[1])
+
+    rss = int(_run_script(f"ps -o rss -p {pid} | tail -1")) * 1024
+    gcutil = _gcutil_metric(pid)
+    result = {
+        'time': datetime.now(),
+        'th': thread_count,
+        'th_p': thread_count_peak,
+        'e_pct': gcutil['E'],
+        'o_pct': gcutil['O'],
+        'ygc': gcutil['YGC'],
+        'ygct': gcutil['YGCT'],
+        'fgc': gcutil['FGC'],
+        'fgct': gcutil['FGCT'],
+        'cgc': gcutil['CGC'],
+        'cgct': gcutil['CGCT'],
+        'gct': gcutil['GCT'],
+        'u_heap': round(used_heap / 1024 / 1024, 1),
+        'm_heap': round(max_heap / 1024 / 1024, 1),
+        'rss': round(rss / 1024 / 1024, 1),
+    }
+    if native_mem_track:
+        native_mem_info = _run_script(f"jcmd {pid} VM.native_memory summary scale=B")
+        total_committed = int(_run_script(f"jcmd {pid} VM.native_memory summary scale=B | grep 'Total:' | grep -o 'committed=[0-9]*$'").split('=')[1])
+        result['native'] = round(int(_run_script(f"echo '{native_mem_info}' | grep Other | grep -o 'committed=[0-9]*'").split('=')[1]) / 1024 / 1024, 1)
+        result['commit'] = round(total_committed / 1024 / 1024, 1)
+        result['r/c'] = round(rss / total_committed, 2)  # measure malloc effeciency
+    return result
+
+
+@cli.command(help='Monitor JVM stats')
+@click.argument('pid', type=int, required=True)
+@click.option('--interval', '-i', default=3, type=int, show_default=True)
+def monitor(pid, interval):
+    global native_mem_track
+    native_mem_track = _is_native_memory_track_enabled(pid)
+    logger.info(f"NativeMemoryTracking enabled: {native_mem_track}")
+    csv_filename = f'jvm_{pid}.csv'
+    h_keys = _fetch_metric(pid).keys()
+    if not isfile(csv_filename):
+        with open(csv_filename, 'w') as f:
+            headers = ",".join(h_keys)
+            logger.info(headers)
+            f.write(headers + '\n')
+    count = 0
+    while True:
+        metrics = _fetch_metric(pid)
+        m_values = metrics.values()
+        m_str_values = [str(v) for v in m_values]
+        metrics_str = ','.join(m_str_values)
+        with open(csv_filename, 'a') as f:
+            f.write(metrics_str + '\n')
+            logger.info(metrics_str)
+        metrics['time'] = metrics['time'].strftime('%H:%M:%S')
+        output = pretty_print([metrics], json_format=False, tf='plain', raw=True)
+        if count % 5 == 0:
+            print(output)
+        else:
+            print(output.splitlines()[1])
+#        print('\t'.join([str(v) for v in m_values]))
+        time.sleep(interval - 1)
+        count += 1
+    pass
+
+
+@cli.command(help='Print class histogram', name='GC.class_histogram')
 @click.argument('pid', type=int, required=True)
 @click.option('--jcmd', '-j', default='jcmd', show_default=True)
 @click.option('--top', '-n', default=-4, type=int, show_default=True)
@@ -47,7 +175,7 @@ def histogram(pid, jcmd, top):
         if line.strip():
             print(line)
 
-@cli.command(help='Print string table')
+@cli.command(help='Print string table', name='VM.stringtable')
 @click.argument('pid', type=int, required=True)
 @click.option('--jcmd', '-j', default='jcmd', show_default=True)
 def string_table(**kwargs):
@@ -58,13 +186,13 @@ def _run_script(cmd):
     if rc != 0:
         bye(e)
     else:
-        return o
+        return o.strip()
 
 def _string_table(pid, jcmd):
     o = _run_script(f"{jcmd} {pid} VM.stringtable")
     print(o)
 
-@cli.command(help='Print heap info')
+@cli.command(help='Print heap info', name='jmap.heap')
 @click.argument('pid', type=int, required=True)
 def heap_info(**kwargs):
     _jmap(**kwargs)
@@ -88,14 +216,143 @@ def parse_stack(x, stack_file):
         _print_stack_info(stack_info, x=x)
     pass
 
-@cli.command(help='Show jvm stack info on Linux platform')
+@cli.command(help='Show jvm native memory info', name='VM.native_memory')
+@click.argument('pid', type=int, required=True)
+@click.option('--jcmd', '-j', default='jcmd', show_default=True)
+@click.option('-b', is_flag=True)
+@click.option('-m', is_flag=True)
+@click.option('-g', is_flag=True)
+@click.option('--raw', is_flag=True)
+@click.option('--max-guess-span', type=int, default=4, show_default=True)
+def native_memory(pid, jcmd, b, m, g, raw, max_guess_span):
+    unit = 'KB'
+    s = 1024
+    if g:
+        unit = 'GB'
+        s = 1024 * 1024 * 1024
+    if m:
+        unit = 'MB'
+        s = 1024 * 1024
+    if b:
+        unit = 'B'
+        s = 1
+    _check_jcmd(jcmd)
+    output = _run_script(f"{jcmd} {pid} VM.native_memory summary scale={unit}")
+
+    if raw:
+        print(output)
+    else:
+        rss = None
+        if sys.platform == 'linux':
+            rss_bytes = int(_run_script(f'ps -o rss -p {pid} -h').strip()) * 1024
+            rss = int(rss_bytes / s)
+            logger.info(f"RSS for {pid}: {rss}{unit}")
+        _parse_native_mem(output, rss, unit)
+
+    if sys.platform == 'linux':
+        if is_root():
+            kbytes_array = []
+            for line in _run_script(f"pmap -x {pid} | grep anon | awk '{{print $2;}}'").split():
+                kbytes_array.append(int(line))
+
+            guesses = [_guess_by(kbytes_array, d) for d in range(1, max_guess_span + 1)]
+            logger.info(f"guesses: {[i for i in enumerate(guesses, 1)]}")
+            print(f"Guess for number of arena chunks(glib malloc): {sum(guesses)}")
+        else:
+            goodbye("Please run as root to see arena chunk info")
+
+
+def _guess_by(array, div):
+    tries = []
+    for i in range(0, div):
+        count = _do_guess(_group_every(array[i:] + [0] * i, div))
+        tries.append(count)
+    m = max(tries)
+    logger.info(f"tries for div {div}: {tries}, max: {m}")
+    return m
+
+def _do_guess(couples):
+    count = 0
+    for couple in couples:
+        if sum(couple) == ARENA_CHUNK_SIZE:
+            logger.info(f"found couple: {couple}({len(couple)})")
+            count += 1
+    return count
+
+def _group_every(lst, N):
+    return [lst[n:n + N] for n in range(0, len(lst), N)]
+
+# https://stackoverflow.com/questions/53451103/java-using-much-more-memory-than-heap-size-or-size-correctly-docker-memory-limi
+@cli.command(help='Parse jvm native memory from file/stdin')
+@click.option('--input', '-i', 'input_file', help='file to work with', type=click.File('r'), default=sys.stdin, show_default=True)
+def native_memory_parse(input_file):
+    with input_file:
+        txt = input_file.read()
+        _parse_native_mem(txt)
+    pass
+
+def _parse_native_mem(txt, rss=None, u='KB'):
+    logger.info(f"Native Memory info: \n{txt}")
+    total_reserved = None
+    total_committed = None
+    result = []
+    unit = None
+    for line in txt.splitlines():
+        if line.startswith('-'):
+            groups = extract(r'^-\s*(.*) \(reserved=([0-9]*).*, committed=([0-9]*).*\)$', line)
+            if groups:
+                name, r, c = groups
+                result.append({
+                    'n': name,
+                    'r': r,
+                    'c': c
+                })
+        elif line.startswith('Total'):
+            # groups = extract(r'^Total: reserved=([0-9]*)([GMKB]?), committed=([0-9]*).*$', line)
+            groups = extract(r'^Total: reserved=([0-9]*)(.*), committed=([0-9]*).*$', line)
+            # print(groups)
+            if groups:
+                total_reserved, unit, total_committed = groups
+    unit = unit or u
+    r = 0
+    c = 0
+    for i in result:
+        if i['n'] == 'Other':
+            i['n'] += '(DirectBuffer)'
+        if i['n'] == 'Symbol':
+            i['n'] += '(string table,constant pool)'
+        if i['n'] == 'Arena Chunk':
+            i['n'] += '(Memory used by chunks in the arena chunk pool)'
+        r += int(i['r'])
+        c += int(i['c'])
+    pretty_print(sorted(result, key=lambda x: int(x['c']), reverse=True), mappings={
+        'Module': 'n',
+        f'reserved({unit})': 'r',
+        f'committed({unit})': 'c',
+    })
+    print()
+    t_r = f"{total_reserved}{unit}"
+    t_c = f"{total_committed}{unit}"
+    if not total_reserved:
+        t_r = 'n/a'
+        info("NMT not enabled? (-XX:NativeMemoryTracking=detail)")
+    if not total_committed: t_c = 'n/a'
+    if rss:
+        print(f"Total: reserved={t_r}, committed={t_c}, rss={rss}{unit}")
+    else:
+        print(f"Total: reserved={t_r}, committed={t_c}")
+    # print(f"Total(calculated): reserved={r}{unit}, committed={c}{unit}")
+
+
+@cli.command(help='Show jvm stack info on Linux platform', name='Thread.print')
 @click.argument('pid', type=int, required=True)
 @click.option('--jstack-bin', '-j', default='jstack', show_default=True)
 @click.option('--jcmd', default='jcmd', show_default=True)
 @click.option('--top', '-n', default=-1, type=int, show_default=True)
 @click.option('-x', is_flag=True)
+@click.option('--raw', is_flag=True)
 @click.option('--force-psutil', is_flag=True)
-def threads(**kwargs):
+def thread_info(**kwargs):
     _jstack(**kwargs)
     pass
 
@@ -112,6 +369,7 @@ def _print_stack_info(stack_info, t_infos={}, x=False, top=-1):
         if 'Found' in line and 'deadlock' in line:
             found_deadlock = True
         if 'nid=' in line:
+            daemon = 'daemon' in line
             first_quote_idx = line.index('"')
             second_quote_idx = line.index('"', first_quote_idx + 1)
             thread_name = line[first_quote_idx + 1:second_quote_idx - first_quote_idx]
@@ -140,6 +398,7 @@ def _print_stack_info(stack_info, t_infos={}, x=False, top=-1):
             if 'waiting' in line:
                 the_info['state'] = 'WAITING'
             next_line = lines[i]
+            the_info['daemon'] = daemon or ''
             if 'java.lang.Thread.State' in next_line:
                 the_info['state'] = next_line.split(':')[1].strip()
 
@@ -148,9 +407,10 @@ def _print_stack_info(stack_info, t_infos={}, x=False, top=-1):
             del t_infos[k]
     pretty_print(list(t_infos.values())[:top], mappings={
         'name': ('tname', _compress),
-        'tid': 'ntid',
+        # 'tid': 'ntid',
+        'daemon': "daemon",
         'tid (hex)': 'ntid_hex',
-        'allocated (heap)': 'allocated',
+        'heap': 'allocated',    # ever allocated heap
         'classes': 'defined_classes',
         'cpu': 'cpu',
         'clock': 'elapsed',
@@ -174,7 +434,7 @@ def _check_jcmd(jcmd):
         bye(f"{jcmd} not found")
 
 # @as_root
-def _jstack(pid, jstack_bin, jcmd, x, top, force_psutil):
+def _jstack(pid, jstack_bin, jcmd, x, top, force_psutil, raw):
     _check_jcmd(jcmd)
     try:
         proc = psutil.Process(pid)
@@ -213,6 +473,9 @@ def _jstack(pid, jstack_bin, jcmd, x, top, force_psutil):
         logger.error(stderr)
         bye(f"Failed to get stack info: {stderr}")
     logger.info(f"jstack for {pid}: \n{stack_info}")
+    if raw:
+        print(stack_info)
+        return
     _print_stack_info(stack_info, t_infos=t_infos, x=x, top=top)
     # for line in stack_info.splitlines():
     #     if 'nid=' in line:

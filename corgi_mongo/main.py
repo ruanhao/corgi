@@ -7,7 +7,6 @@ from corgi_common import config_logging, pretty_print, get, bye
 from corgi_common.dateutils import pretty_duration
 import logging
 import pymongo
-from pprint import pprint
 
 logger = logging.getLogger(__name__)
 
@@ -15,22 +14,28 @@ def info(msg):
     print(msg)
     logger.info(msg)
 
+def warning(msg):
+    click.secho(msg, fg='yellow')
+    logger.warning(msg)
+
 def _color(v, func):
     if func(v):
         return click.style(str(v), fg='red')
     else:
         return str(v)
 
-def _mongo_client(host, port):
-    mongo_client = pymongo.MongoClient(host, port)
+def _mongo_client(host, port, username=None, password=None):
+    logger.info(f"Connecting to MongoDB {host}:{port} ({username}/{password})...")
+    mongo_client = pymongo.MongoClient(host, port, username=username, password=password)
     try:
-        mongo_client.server_info()
+        info = mongo_client.server_info()
+        logger.info(f"MongoDB server info: {info}")
     except Exception as ex:
         bye(f"Failed to connect to MongoDB: {ex}")
     return mongo_client
 
-def _mongo_db(host, port, db):
-    return _mongo_client(host, port)[db]
+def _mongo_db(host, port, db, username=None, password=None):
+    return _mongo_client(host, port, username, password)[db]
 
 def _mongo_collection(host, port, db, collection):
     return _mongo_db(host, port, db)[collection]
@@ -53,7 +58,7 @@ def _print_profiles(docs, brief=False, offset=0):
     if not brief:
         for idx, doc in enumerate(docs, 1 + offset):
             s = f"--- [ Record {idx} ] ---\n{json.dumps(doc, indent=2, default=str)}"
-            logger.info(s)
+            logger.debug(s)
             print(s)
         return
 
@@ -75,24 +80,69 @@ def _print_profiles(docs, brief=False, offset=0):
         'nModified': 'nModified',
     }
     for idx, doc in enumerate(docs, 1 + offset):
-        logger.info(f"--- [ Record {idx} ] ---\n{json.dumps(doc, indent=2, default=str)}")
+        logger.debug(f"--- [ Record {idx} ] ---\n{json.dumps(doc, indent=2, default=str)}")
     pretty_print(docs, mappings=mappings, x=True, offset=offset)
 
 @cli.command(help='Show memory info')
 @click.option('--host', '-h', default='localhost', show_default=True)
 @click.option('--port', '-p', default=27017, type=int, show_default=True)
-def mem_info(host, port):
-    db = _mongo_db(host, port, 'admin')
+@click.option('--username', '-u')
+@click.option('--password', '-P')
+def mem_info(host, port, username, password):
+    db = _mongo_db(host, port, 'admin', username=username, password=password)
     server_status = db.command('serverStatus')
     print(get(server_status, 'tcmalloc.tcmalloc.formattedString'))
+
+@cli.command(help='Show collections info')
+@click.option('--host', '-h', default='localhost', show_default=True)
+@click.option('--port', '-p', default=27017, type=int, show_default=True)
+@click.option('-db', "dbname", required=True)
+@click.option('-c', "collections", help='Filter by collecitons, seperated by comma')
+@click.option('-json', "json_format", is_flag=True)
+@click.option('-x', is_flag=True)
+@click.option('-k', is_flag=True, help='Scale in K')
+@click.option('-m', is_flag=True, help='Scale in M')
+@click.option('-g', is_flag=True, help='Scale in G')
+def coll_info(host, port, dbname, collections, json_format, x, k, m, g):
+    scale = 1024                # default
+    unit = 'k'                  # default
+    if g:
+        scale = 1024 * 1024 * 1024
+        unit = 'g'
+    if m:
+        scale = 1024 * 1024
+        unit = 'm'
+    if k:
+        scale = 1024
+        unit = 'k'
+    db = _mongo_db(host, port, dbname)
+    result = []
+    if collections:
+        c_names = collections.split(',')
+    else:
+        c_names = db.collection_names()
+    for coll_name in c_names:
+        result.append(db.command('collStats', scale=scale, collStats=coll_name))
+    pretty_print(sorted(result, key=lambda r: r['size']), mappings={
+        'col': ('ns', lambda ns: '.'.join(ns.split('.')[1:])),
+        f'size({unit})': 'size',  # total uncompressed size in memory of all records in a collection. The size does not include the size of any indexes associated with the collection, which the totalIndexSize field reports.
+        f'storageSize({unit})': 'storageSize',  # compressed size (does not include index)
+        'count': 'count',  # The number of objects or documents in this collection.
+        'nindexes': 'nindexes',        # num of indexes
+        f'totalIndexSize({unit})': 'totalIndexSize',
+        'capped': ('capped', lambda b: 'y' if b else ''),
+
+    }, json_format=json_format, x=x)
+
 
 @cli.command(help='Show DB info')
 @click.option('--host', '-h', default='localhost', show_default=True)
 @click.option('--port', '-p', default=27017, type=int, show_default=True)
-@click.option('--port', '-p', default=27017, type=int, show_default=True)
-@click.option('--db', "dbname", required=True)
-def db_info(host, port, dbname):
-    db = _mongo_db(host, port, dbname)
+@click.option('--username', '-u')
+@click.option('--password', '-P')
+@click.option('-db', "dbname", required=True)
+def db_info(host, port, dbname, username, password):
+    db = _mongo_db(host, port, dbname, username=username, password=password)
     j = db.command('dbStats', scale=1024 * 1024)
     for n in ['ok', 'db', 'scaleFactor']:
         if n in j:
@@ -124,13 +174,18 @@ def db_info(host, port, dbname):
             info(f"{k:15s}: {v:11}")
     pass
 
+
 @cli.command(help='Show basic info')
+@click.option('--username', '-u')
+@click.option('--password', '-P')
 @click.option('--host', '-h', default='localhost', show_default=True)
 @click.option('--port', '-p', default=27017, type=int, show_default=True)
-def basic_info(host, port):
-    db = _mongo_db(host, port, 'admin')
+def basic_info(host, port, username, password):
+    db = _mongo_db(host, port, 'admin', username=username, password=password)
     build_info = db.command('buildInfo')
+    logger.info(f"MONGO BUILDINFO: {build_info}")
     host_info = db.command('hostInfo')
+    logger.info(f"MONGO HOSTINFO: {host_info}")
     server_status = db.command('serverStatus')
 
     comm_status = db.command('getCmdLineOpts')
@@ -142,9 +197,11 @@ def basic_info(host, port):
     res['log_file'] = get(comm_status, 'parsed.systemLog.path')
 
     res['mongo_version'] = get(build_info, 'version')
+    res['allocator'] = get(build_info, 'allocator')
     res['os_cpu_freq'] = get(host_info, 'extra.cpuFrequencyMHz')
     res['os_kernel_version'] = get(host_info, 'extra.kernelVersion')
     _os = get(host_info, 'os')
+
     res['os'] = f"{_os['name']}({_os['version']})"
     res['os_mem'] = get(host_info, 'system.memSizeMB')
     res['os_cpu_cores'] = get(host_info, 'system.numCores')
@@ -163,6 +220,7 @@ def basic_info(host, port):
         'OS Mem': 'os_mem',
         'OS CPUs': 'os_cpu_cores',
         'OS Arch': 'os_cpu_arch',
+        'Allocator': 'allocator',
         'Connections': 'conns',
         'Uptime': ('uptime', pretty_duration),
         'DB path': 'db_path',
@@ -176,7 +234,7 @@ def basic_info(host, port):
 @cli.command(help='Profiling')
 @click.option('--host', '-h', default='localhost', show_default=True)
 @click.option('--port', '-p', default=27017, type=int, show_default=True)
-@click.option('--op', default=None, type=click.Choice([
+@click.option('-op', default=None, type=click.Choice([
     'command',
     'count',
     'distinct',
@@ -190,7 +248,7 @@ def basic_info(host, port):
     'update',
     '',
 ]), show_default=True)
-@click.option('--db', "dbname", required=True)
+@click.option('-db', "dbname", required=True)
 @click.option('--app', help='Filter by appName')
 @click.option('--collection', '-c', help='Filter by collection')
 @click.option('--brief', '-b', is_flag=True)
@@ -211,8 +269,14 @@ def profile(host, port, dbname, op, brief, app, collection, slowms):
     if app:
         _filter['appName'] = app
 
-    for doc in system.profile.find(_filter).limit(limit).sort('ts', -1):
-        fetched_ts.add(doc['ts'])
+    logger.info("Dropping system.profile collection")
+    system.profile.drop()
+    capped_size = 256 * 1024 * 1024
+    logger.info(f"Creating system.profile with max {capped_size} bytes")
+    db.create_collection('system.profile', capped=True, size=capped_size)
+
+    # for doc in system.profile.find(_filter).limit(limit).sort('ts', -1):
+    #     fetched_ts.add(doc['ts'])
 
     if slowms is not None:
         logger.info(f"Set profile level to 1 with slowms={slowms}")
@@ -223,17 +287,20 @@ def profile(host, port, dbname, op, brief, app, collection, slowms):
     offset = 0
     try:
         while True:
-            docs = system.profile.find(_filter).limit(limit).sort('ts', -1)
-            new_docs = []
-            for doc in docs:
-                ts = doc['ts']
-                if ts not in fetched_ts:
-                    fetched_ts.add(ts)
-                    new_docs += [doc]
-            if new_docs:
-                _print_profiles(new_docs, brief, offset=offset)
-                offset += len(new_docs)
-            time.sleep(1)
+            try:
+                docs = system.profile.find(_filter).limit(limit).sort('ts', -1)
+                new_docs = []
+                for doc in docs:
+                    ts = doc['ts']
+                    if ts not in fetched_ts:
+                        fetched_ts.add(ts)
+                        new_docs += [doc]
+                if new_docs:
+                    _print_profiles(new_docs, brief, offset=offset)
+                    offset += len(new_docs)
+                time.sleep(1)
+            except Exception as e:
+                warning(str(e))
     finally:
         logger.info("Set profile level back to 0")
         db.command("profile", 0)

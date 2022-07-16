@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import click
 from corgi_common.loggingutils import config_logging
+from corgi_common.scriptutils import run_script
+from corgi_common import as_root
 import socket
 import logging
 
@@ -10,6 +12,16 @@ logger = logging.getLogger(__name__)
 @click.group(help="Just some script")
 def cli():
     pass
+
+
+@cli.command(help='Monitor conntrack SNAT events')
+def conntrack_monitor_snat():
+    # iptables -t nat -A POSTROUTING -s 10.74.107.0/24 ! -d 10.0.0/8 -o eth0 -m state --state NEW -j MASQUERADE
+    @as_root
+    def _conntrack_monitor_snat():
+        run_script("conntrack -E -n", realtime=True)
+
+    _conntrack_monitor_snat()
 
 
 @cli.command(help='Test netty decoder')
