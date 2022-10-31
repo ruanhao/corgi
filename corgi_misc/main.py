@@ -3,14 +3,51 @@
 import click
 from corgi_common.loggingutils import config_logging
 from corgi_common.scriptutils import run_script
+from corgi_common.dateutils import YmdHMS
 from corgi_common import as_root
 import socket
 import logging
+from icecream import ic
 
 logger = logging.getLogger(__name__)
 
 @click.group(help="Just some script")
 def cli():
+    pass
+
+@cli.group(help='[command group] openssl utils')
+def openssl():
+    pass
+
+
+@openssl.command()
+@click.option('--port', '-p', default=443, type=int, show_default=True)
+@click.argument('site')
+def show_site_cert(site, port):
+    cmd = f'openssl s_client -showcerts -connect {site}:{port} <<<""'
+    _, stdout, _ = run_script(cmd)
+    print(stdout)
+    pass
+
+@openssl.command()
+@click.option('--days', '-d', default=3650, type=int, show_default=True)
+@click.option('--common-name', '-cn', 'cn', default='test.com', show_default=True)
+@click.option('--organization', '-o', default='CRDC', show_default=True)
+@click.option('--san', '-san', required=False, help='subjectAltName ext')
+def gen_self_sign_cert(days, cn, organization, san):
+    ymdhms = YmdHMS()
+    key_filename = f'key-{ymdhms}.pem'
+    cert_filename = f'cert-{ymdhms}.pem'
+    cmd = f"openssl req -x509 -sha256 -nodes -days {days} -newkey rsa:2048 -keyout {key_filename} -out {cert_filename} -subj /CN={cn}/O={organization}"
+    if san:
+        san = san.split(',')
+        content = ','.join([f'DNS:{s}' for s in san])
+        cmd += f' -addext "subjectAltName = {content}"'
+    print(cmd)
+    run_script(cmd)
+    print('done')
+    print(f'key: {key_filename}')
+    print(f'cert: {cert_filename}')
     pass
 
 
@@ -87,6 +124,104 @@ def send_length_field_based_frame(version, host, port):
             my_bytes.extend(line.encode('utf-8'))
             sock.send(my_bytes)
     pass
+
+@cli.command(help='restful server')
+@click.option("--port", '-p', type=int, default=8081)
+def restful(port):
+    from flask import request, jsonify, Flask
+
+    ALL_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT', 'OPTIONS', 'TRACE', 'PATCH']
+    api = Flask(__name__)
+
+    @api.route('/', defaults={'path': ''}, methods=ALL_METHODS)
+    @api.route('/<path:path>', methods=ALL_METHODS)
+    def _catch_all(path):
+        ic(
+            path,
+            request.method,
+            request.url,
+            request.base_url,
+            request.url_charset,
+            request.url_root,
+            str(request.url_rule),
+            request.host_url,
+            request.host,
+            request.script_root,
+            request.path,
+            request.full_path,
+            request.args
+        )
+        return jsonify({'success': True})
+
+    api.run(port=port)
+
+@cli.command(short_help='restful proxy server')
+@click.option("--port", '-p', type=int, default=8081)
+@click.option("--upstream", '-u', required=True, help='real host, like www.baidu.com')
+@click.option("--secure", is_flag=True)
+@click.option("--prod", is_flag=True)
+def restful_proxy(port, upstream, secure, prod):
+    """restful proxy server, take https://www.google.com for example:
+
+    \b
+    User[/etc/hosts: 1.2.3.4 www.google.com] (need to install nginx cert, e.g keytool import)
+
+    NGINX(ip/1.2.3.4) [0.0.0.0:443 <-> corgi(localhost:8081)]
+
+    corgi[localhost:8081 <-> www.google.com:443]
+    """
+    from flask import request, Flask, Response
+    import requests
+    ALL_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT', 'OPTIONS', 'TRACE', 'PATCH']
+    EXCLUDED_HEADERS = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+    api = Flask(__name__)
+    scheme = 'https' if secure else 'http'
+    proxy_url = f'{scheme}://{upstream}/'
+
+    def _download_file(streamable):
+        with streamable as stream:
+            stream.raise_for_status()
+            for chunk in stream.iter_content(chunk_size=8192):
+                yield chunk
+
+    def _proxy(*args, **kwargs):
+        resp = requests.request(
+            method=request.method,
+            url=request.url.replace(request.host_url, proxy_url),
+            headers={key: value for (key, value) in request.headers if key != 'Host'},  # maybe need to add  Host here if upstream is an IP
+            data=request.get_data(),
+            cookies=request.cookies,
+            allow_redirects=False,
+            stream=True
+        )
+        headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in EXCLUDED_HEADERS]
+        return Response(_download_file(resp), resp.status_code, headers)
+
+    @api.route('/', defaults={'path': ''}, methods=ALL_METHODS)
+    @api.route('/<path:path>', methods=ALL_METHODS)
+    def _catch_all(path):
+        ic(
+            path,
+            request.method,
+            request.url,
+            request.base_url,
+            request.url_charset,
+            request.url_root,
+            str(request.url_rule),
+            request.host_url,
+            request.host,
+            request.script_root,
+            request.path,
+            request.full_path,
+            request.args
+        )
+        return _proxy()
+
+    if prod:
+        from waitress import serve
+        serve(api, port=port)
+    else:
+        api.run(port=port, debug=logger.isEnabledFor(logging.DEBUG))
 
 
 def main():

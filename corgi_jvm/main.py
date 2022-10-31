@@ -1,15 +1,17 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import click
-from os.path import isfile
+from os.path import isfile, join
 import sys
 from corgi_common import config_logging, pretty_print, bye, as_root, is_root, goodbye
+from corgi_common.dateutils import YmdHMS
 from corgi_common.scriptutils import run_script
 from corgi_common.textutils import extract
 import logging
 import time
 from datetime import datetime
 import psutil
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,6 @@ def _numeric(text):
 def _gcutil_metric(pid):
     """https://github.com/frohoff/jdk8u-dev-jdk/blob/master/src/share/classes/sun/tools/jstat/resources/jstat_options"""
     output = _run_script(f"jstat -gcutil {pid}")
-    logger.info("\n" + output)
     lines = output.splitlines()
     headers = lines[0].split()
     values = [_numeric(v) for v in lines[1].split()]
@@ -92,8 +93,19 @@ def _gcutil_metric(pid):
     logger.info(d)
     return d
 
+def _jit_metric(pid):
+    output = _run_script(f"jstat -compiler {pid}")
+    lines = output.splitlines()
+    headers = lines[0].split()
+    values = [_numeric(v) for v in lines[1].split()]
+    d = dict(zip(headers, values))
+    logger.info(d)
+    return d
 
-def _fetch_metric(pid):
+def _round(n, d=1):
+    return round(n + 1e-9, d)
+
+def _fetch_metric(pid, proc, with_jit=False):
     global max_heap
     # thread_count = int(_run_script(f'jcmd {pid} Thread.print -l -e | grep "java.lang.Thread.State" | wc -l'))
 
@@ -104,49 +116,66 @@ def _fetch_metric(pid):
 
     rss = int(_run_script(f"ps -o rss -p {pid} | tail -1")) * 1024
     gcutil = _gcutil_metric(pid)
+
     result = {
         'time': datetime.now(),
+
+        'cpu': proc.cpu_percent(),
+
         'th': thread_count,
         'th_p': thread_count_peak,
+
         'e_pct': gcutil['E'],
-        'o_pct': gcutil['O'],
         'ygc': gcutil['YGC'],
         'ygct': gcutil['YGCT'],
+
+        'o_pct': gcutil['O'],
         'fgc': gcutil['FGC'],
         'fgct': gcutil['FGCT'],
+
         'cgc': gcutil['CGC'],
         'cgct': gcutil['CGCT'],
+
         'gct': gcutil['GCT'],
-        'u_heap': round(used_heap / 1024 / 1024, 1),
-        'm_heap': round(max_heap / 1024 / 1024, 1),
-        'rss': round(rss / 1024 / 1024, 1),
+
+        'u_heap': _round(used_heap / 1024 / 1024),
+        'm_heap': _round(max_heap / 1024 / 1024),
+        'rss': _round(rss / 1024 / 1024),
     }
     if native_mem_track:
         native_mem_info = _run_script(f"jcmd {pid} VM.native_memory summary scale=B")
         total_committed = int(_run_script(f"jcmd {pid} VM.native_memory summary scale=B | grep 'Total:' | grep -o 'committed=[0-9]*$'").split('=')[1])
-        result['native'] = round(int(_run_script(f"echo '{native_mem_info}' | grep Other | grep -o 'committed=[0-9]*'").split('=')[1]) / 1024 / 1024, 1)
-        result['commit'] = round(total_committed / 1024 / 1024, 1)
-        result['r/c'] = round(rss / total_committed, 2)  # measure malloc effeciency
+        result['commit'] = _round(total_committed / 1024 / 1024)
+        result['r/c'] = _round(rss / total_committed, 3)  # measure malloc effeciency
+        result['native'] = _round(int(_run_script(f"echo '{native_mem_info}' | grep Other | grep -o 'committed=[0-9]*'").split('=')[1]) / 1024 / 1024)
+    if with_jit:
+        jit = _jit_metric(pid)
+        result['jc'] = jit['Compiled']
+        result['jf'] = jit['Failed']
+        result['jt'] = jit['Time']
     return result
 
 
 @cli.command(help='Monitor JVM stats')
 @click.argument('pid', type=int, required=True)
 @click.option('--interval', '-i', default=3, type=int, show_default=True)
-def monitor(pid, interval):
+@click.option('--with-jit', is_flag=True, show_default=True)
+def monitor(pid, interval, with_jit):
     global native_mem_track
     native_mem_track = _is_native_memory_track_enabled(pid)
     logger.info(f"NativeMemoryTracking enabled: {native_mem_track}")
     csv_filename = f'jvm_{pid}.csv'
-    h_keys = _fetch_metric(pid).keys()
+    proc = psutil.Process(pid)
+    h_keys = _fetch_metric(pid, proc).keys()
     if not isfile(csv_filename):
         with open(csv_filename, 'w') as f:
             headers = ",".join(h_keys)
             logger.info(headers)
             f.write(headers + '\n')
     count = 0
+
     while True:
-        metrics = _fetch_metric(pid)
+        metrics = _fetch_metric(pid, proc, with_jit)
         m_values = metrics.values()
         m_str_values = [str(v) for v in m_values]
         metrics_str = ','.join(m_str_values)
@@ -159,7 +188,6 @@ def monitor(pid, interval):
             print(output)
         else:
             print(output.splitlines()[1])
-#        print('\t'.join([str(v) for v in m_values]))
         time.sleep(interval - 1)
         count += 1
     pass
@@ -186,13 +214,27 @@ def _run_script(cmd):
     if rc != 0:
         bye(e)
     else:
-        return o.strip()
+        out = o.strip()
+        logger.info(f"{cmd}\n{out}")
+        return out
 
 def _string_table(pid, jcmd):
     o = _run_script(f"{jcmd} {pid} VM.stringtable")
     print(o)
 
-@cli.command(help='Print heap info', name='jmap.heap')
+@cli.command(help='Dump heap', name='GC.heap_dump')
+@click.argument('pid', type=int, required=True)
+@click.option('--jcmd', '-j', default='jcmd', show_default=True)
+@click.option('--file', '-f', "filepath")
+def heap_dump(pid, jcmd, filepath):
+    if not filepath:
+        # tempdir = tempfile.mkdtemp()
+        tempdir = tempfile.gettempdir()
+        filepath = join(tempdir, f"{YmdHMS()}.hprof")
+    print(_run_script(f"{jcmd} {pid} GC.heap_dump {filepath}"))
+    pass
+
+@cli.command(help='Print heap configuration', name='jmap.heap')
 @click.argument('pid', type=int, required=True)
 def heap_info(**kwargs):
     _jmap(**kwargs)
@@ -454,7 +496,7 @@ def _jstack(pid, jstack_bin, jcmd, x, top, force_psutil, raw):
             t_infos[tid_hex] = {
                 'ntid': tid,
                 'ntid_hex': tid_hex,
-                'pcpu': round(float((t.system_time + t.user_time) / total_time), 2)
+                'pcpu': _round(float((t.system_time + t.user_time) / total_time), 2)
             }
     else:
         for line in (stdout or '').splitlines():

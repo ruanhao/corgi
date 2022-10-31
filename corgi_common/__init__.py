@@ -14,6 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from pprint import pprint
 import traceback
+from icecream import ic
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
@@ -64,7 +66,7 @@ class NonBlockingStreamReader:
 
     def readline(self, timeout=None):
         try:
-            return self._q.get(block =timeout is not None, timeout=timeout)
+            return self._q.get(block=timeout is not None, timeout=timeout)
         except Empty:
             logger.debug(f"NBSR timeout ({timeout}s)")
             return None
@@ -72,8 +74,12 @@ class NonBlockingStreamReader:
     def close(self):
         self._s.close()
 
+def ic_time_format():
+    return f'\n{datetime.now()}| '
 
 def config_logging(name, level=None):
+    ic.configureOutput(prefix=ic_time_format, includeContext=True)
+
     if not level:
         level = logging.INFO
         for option in ('-v', '--verbose', '--debug'):
@@ -237,13 +243,14 @@ def run_script(command, capture=False, realtime=False, opts='', dry=False):
             last_n_lines = []
             nbsr = NonBlockingStreamReader(process.stdout)
             while True:
-                realtime_output = nbsr.readline(15) # block 15s at most
+                realtime_output = nbsr.readline(15)  # block 15s at most
                 if process.poll() is not None:
                     break
                 if realtime_output:
                     logger.debug(f"[{process.pid}:stdout] " + realtime_output.rstrip())
                     print(realtime_output.rstrip())
-                    last_n_lines.append(realtime_output.rstrip()); last_n_lines = last_n_lines[-10:]
+                    last_n_lines.append(realtime_output.rstrip())
+                    last_n_lines = last_n_lines[-10:]
                     sys.stdout.flush()
                     if capture:
                         stdout += realtime_output

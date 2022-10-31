@@ -162,7 +162,7 @@ def launch_instances(
         add_volume,
         add_ephemeral
 ):
-    stack_name += YmdHMS()
+    # stack_name += YmdHMS()
     parameters = [
         Parameter(
             "KeyName",

@@ -366,6 +366,14 @@ def _type(flags):
         result += ['Broadcast Tracking']
     return ','.join(result) if result else ''
 
+@cli.command(help='Show pub/sub channels')
+@click.option('--host', '-h', default='localhost', show_default=True)
+@click.option('--port', '-p', default=6379, type=int, show_default=True)
+def channels(host, port):
+    r = redis.StrictRedis(host=host, port=port, client_name='corgi')
+    channels = r.pubsub_channels()
+    for c in channels:
+        print(c.decode('utf-8'))
 
 @cli.command(help='Show clients info')
 @click.option('--host', '-h', default='localhost', show_default=True)

@@ -37,7 +37,8 @@ def describe_availability_zones(region_names):
 
 
 @ec2.command(help="List CBD Images")
-def ls_cbd_images():
+@click.option('--release', is_flag=True)
+def ls_cbd_images(release):
     images = ec2_client.describe_images(
         Owners=['self'],
         Filters=[
@@ -45,7 +46,15 @@ def ls_cbd_images():
                 'Name': 'name',
                 'Values': ['Cisco*']
             }])['Images']
-    data = [[image['CreationDate'], image['ImageId'], image['Name']]
-            for image in images]
+    # from pprint import pprint
+    # pprint(images)
+    snapshots = []
+    releases = []
+    for image in images:
+        result = snapshots
+        if 'Tags' in image:
+            result = releases
+        result.append([image['CreationDate'], image['ImageId'], image['Name']])
 
+    data = releases if release else snapshots
     print(tabulate(data, headers=['CreateDate', 'Image', 'Name']))

@@ -185,9 +185,9 @@ def tap(host, port, username, password, vhost, exchange, route_key):
     logger.info(f"Queue {queue} bound to exchange {exchange} with routing key: {route_key}")
     count = 1
 
-    def _handle_msg(msg0):
+    def _handle_msg(rk, msg0):
         nonlocal count
-        logger.info(f'[RECORD {count}]: {msg0}')
+        logger.info(f'[RECORD {count} (#{rk})]: {msg0}')
         try:
             msg = json.dumps(json.loads(msg0), indent=2, default=str, sort_keys=True)
             # msg = json.dumps(msg0, indent=2, default=str, sort_keys=True)
@@ -195,15 +195,17 @@ def tap(host, port, username, password, vhost, exchange, route_key):
             logger.error(f"Failed to dump json content: {e}")
             msg = msg0
             pass
-        header = f'-[ RECORD {count} {now()} ]-'.ljust(100, '-')
+        header = f'-[ RECORD {count} #{rk} {now()} ]-'.ljust(100, '-')
         output = f'{header}\n{msg}'
         print(output, flush=True)
         sys.stdout.flush()
         count += 1
 
     def _cb(c, m, p, b):
+        logger.debug(f"c:{c}, m:{m}, p:{p}, b:{b}")
         msg = b.decode("utf-8")
-        _handle_msg(msg)
+        rk = m.routing_key
+        _handle_msg(rk, msg)
         dt = m.delivery_tag
         c.basic_ack(dt)
 
