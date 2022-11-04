@@ -20,6 +20,43 @@ def openssl():
     pass
 
 
+@cli.command(short_help='Shell reflection')
+@click.option("--port", '-p', default=48080, type=int, help='Listening port on server', show_default=True)
+@click.option("--server", '-s', help='Server hostname/IP', required=True)
+def shell_reflect(port, server):
+    server_cmd = f'socat TCP-LISTEN:{port},fork,reuseaddr EXEC:"bash -li",pty,stderr,setsid,sigint,sane'
+    client_cmd = f'socat file:`tty`,raw,echo=0 tcp:{server}:{port}'
+    print("====== Run on server =====")
+    print(server_cmd)
+    print("====== Run on client =====")
+    print(client_cmd)
+    pass
+
+
+@cli.command(short_help='Remote forward')
+@click.option("--outside-port", '-op', default=48080, type=int, help='Tunnel listening port on outside', show_default=True)
+@click.option("--outside-listening-port", '-ol', default=18080, type=int, help='Application listening port on outside', show_default=True)
+@click.option("--outside", '-o', help='Outside hostname/IP', required=True)
+@click.option("--proxy-ip", '-pi', help='IP proxied by inside', default='localhost', show_default=True)
+@click.option("--proxy-port", '-pp', help='Port proxied by inside', required=True)
+@click.option("--socat", is_flag=True)
+@click.option("--username", '-u', default='<username>', show_default=True)
+def remote_port_forward(outside, outside_port, outside_listening_port, proxy_ip, proxy_port, socat, username):
+    '''Remote port forward using ssh (prefered) or socat (one-time-use)'''
+    if socat:
+        # no need to fork, tunnel can be used only once
+        outside_cmd = f'socat tcp-l:{outside_port},reuseaddr tcp-l:{outside_listening_port},reuseaddr'
+        inside_cmd = f'socat tcp:{outside}:{outside_port},forever,keepalive,keepidle=5,keepcnt=3,keepintvl=5 tcp:{proxy_ip}:{proxy_port}'
+        print("====== Run on outside =====")
+        print(outside_cmd)
+        print("====== Run on inside =====")
+        print(inside_cmd)
+        return
+
+    cmd = f"ssh -f -N -R {outside_listening_port}:{proxy_ip}:{proxy_port} {username}@{outside}"
+    print(cmd)
+
+
 @openssl.command()
 @click.option('--port', '-p', default=443, type=int, show_default=True)
 @click.argument('site')

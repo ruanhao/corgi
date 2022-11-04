@@ -79,12 +79,17 @@ def ic_time_format():
 
 def config_logging(name, level=None):
     ic.configureOutput(prefix=ic_time_format, includeContext=True)
+    ic.disable()
+    if '-ic' in sys.argv:
+        ic.enable()
+        sys.argv.remove('-ic')
 
     if not level:
         level = logging.INFO
         for option in ('-v', '--verbose', '--debug'):
             if option in sys.argv:
                 level = logging.DEBUG
+                ic.enable()
                 sys.argv.remove(option)
                 break
     logging.basicConfig(
@@ -134,9 +139,13 @@ def json_print(data):
         _log_and_print(data)
 
 
-def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True, tf='simple', raw=False):
+def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True, tf='simple', raw=False, numbered=False):
+    if not data:
+        return
     if json_format is True:
         json_print(data)
+    elif not x and numbered:
+        tabulate_numbered_print(data, mappings, offset=offset)
     else:
         return tabulate_print(data, mappings, x, offset, header, tf=tf, raw=raw)
 
@@ -175,11 +184,11 @@ def tabulate_print(data, mappings, x=False, offset=0, header=True, tf='simple', 
             return output
         _log_and_print(output)
 
-def tabulate_numbered_print(data, mappings):
+def tabulate_numbered_print(data, mappings, offset=0):
     mappings = {'No': '_no', **mappings}
     headers = mappings.keys()
     tabdata = []
-    for idx, item in enumerate(data, start=1):
+    for idx, item in enumerate(data, start=1 + offset):
         attrs = []
         item['_no'] = idx
         for h in headers:

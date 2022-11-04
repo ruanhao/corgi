@@ -38,6 +38,7 @@ config = {
             'corgi_rabbit = corgi_rabbit.main:main',
             'corgi_jvm = corgi_jvm.main:main',
             'corgi_misc = corgi_misc.main:main',
+            'corgi_tcpdump = corgi_tcpdump.main:main',
         ]
     },
 }
