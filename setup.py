@@ -21,6 +21,7 @@ config = {
     'package_data': {
         'corgi_vcenter': ['*'],
         'corgi_misc': ['*'],
+        'corgi_forfun': ['*'],
         'corgi_aws': ['*', 'templates/*'],
         'corgi_build': ['*', 'templates/*'],
         'corgi_configure': ['*', 'sh/*', 'templates/*'],
@@ -39,6 +40,7 @@ config = {
             'corgi_jvm = corgi_jvm.main:main',
             'corgi_misc = corgi_misc.main:main',
             'corgi_tcpdump = corgi_tcpdump.main:main',
+            'corgi_forfun = corgi_forfun.main:main',
         ]
     },
 }

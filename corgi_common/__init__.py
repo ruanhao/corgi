@@ -12,24 +12,24 @@ from contextlib import contextmanager
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import json
-from pprint import pprint
+from pprint import pformat
 import traceback
 from icecream import ic
 from datetime import datetime
+from click import echo
 
 logger = logging.getLogger(__name__)
 debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 nbsr_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='nbsr')
 
-
 def _log_and_print(output, pretty=False):
     # if debug:
     #     logger.debug(f'{output}'.rstrip())
     if pretty:
-        pprint(output)
+        echo(pformat(output))
     else:
-        print(output)
+        echo(output)
 
 class UnexpectedEndOfStream(Exception): pass
 
@@ -80,9 +80,9 @@ def ic_time_format():
 def config_logging(name, level=None):
     ic.configureOutput(prefix=ic_time_format, includeContext=True)
     ic.disable()
-    if '-ic' in sys.argv:
-        ic.enable()
-        sys.argv.remove('-ic')
+    # if '-ic' in sys.argv:
+    #     ic.enable()
+    #     sys.argv.remove('-ic')
 
     if not level:
         level = logging.INFO
@@ -103,6 +103,16 @@ def config_logging(name, level=None):
         level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(threadName)s - %(message)s',
         datefmt='%m/%d/%Y %I:%M:%S %p')
+    if level == logging.DEBUG:
+        import http.client as http_client
+        http_client.HTTPConnection.debuglevel = 1
+        http_client_logger = logging.getLogger("http.client")
+
+        def __print_to_log(*args):
+            # ic(args)
+            http_client_logger.debug(" ".join(args))
+
+        http_client.print = __print_to_log
 
 
 def _chain_get(data, chain, default=None):
@@ -257,7 +267,7 @@ def run_script(command, capture=False, realtime=False, opts='', dry=False):
                     break
                 if realtime_output:
                     logger.debug(f"[{process.pid}:stdout] " + realtime_output.rstrip())
-                    print(realtime_output.rstrip())
+                    echo(realtime_output.rstrip())
                     last_n_lines.append(realtime_output.rstrip())
                     last_n_lines = last_n_lines[-10:]
                     sys.stdout.flush()
@@ -293,14 +303,14 @@ def is_root():
 
 def bye(msg, rc=1):
     logger.error(f"See ya [{rc}]: {msg}")
-    print(msg, file=sys.stderr)
+    echo(msg, file=sys.stderr)
     exit(rc)
 
 def goodbye(msg=None):
     logger.info("Bye bye")
     if msg:
         logger.info(f"Bye bye: {msg}")
-        print(msg)
+        echo(msg)
     exit()
 
 
