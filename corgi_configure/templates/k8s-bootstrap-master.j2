@@ -12,6 +12,7 @@ CROSS_SUBNET=$cross_subnet
 kubeadm init --kubernetes-version=v${KUBERNETES_VERSION} \
         --apiserver-advertise-address=0.0.0.0 \
         --pod-network-cidr=$POD_NETWORK \
+        --token-ttl 0 \
     | tee /tmp/kubeinit.log
 
 # enable Swagger UI:
@@ -46,6 +47,12 @@ curl https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml | sed 
 # VXLAN only when crossing subnet
 kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
     {%- endif %}
+{%- endif %}
+
+{% if cni_plugin == 'weave' -%}
+# Deploy Weave (support multicast)
+# https://www.weave.works/docs/net/latest/kubernetes/kube-addon/
+curl -s -L https://github.com/weaveworks/weave/releases/download/v2.8.1/weave-daemonset-k8s.yaml | sed "/name: INIT_CONTAINER/i \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ - name: IPALLOC_RANGE\n\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ value: $POD_NETWORK" | kubectl apply -f -
 {%- endif %}
 
 # Deploy metrics-server (can use `kubectl top` then)

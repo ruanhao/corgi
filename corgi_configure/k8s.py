@@ -35,8 +35,14 @@ def _run(script, dry=False):
 @click.option("--pod-network", default='192.168.0.0/16', show_default=True)
 @click.option("--helm-version", default='3.8.2', show_default=True)
 @click.option("--metrics-server-version", default='0.6.1', show_default=True)
-@click.option('--cni-plugin', default='flannel', type=click.Choice(['flannel', 'calico']), help="CNI plugin", show_default=True)
-@click.option('--cross-subnet', is_flag=True, help="Always use VxLAN, aka use flannel/Directrouting or calico/VXLANCrossSubnet")
+@click.option(
+    '--cni-plugin',
+    default='flannel',
+    type=click.Choice(['flannel', 'calico', 'weave']),  # flannel is simple, calico supports policy, weave supports multicast
+    help="CNI plugin",
+    show_default=True
+)
+@click.option('--cross-subnet', is_flag=True, help="using vxlan, aka use flannel/Directrouting or calico/VXLANCrossSubnet")
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_master_node(dry, **values):
     _run(_get_script_v2('k8s-bootstrap-master.j2', **values), dry)
