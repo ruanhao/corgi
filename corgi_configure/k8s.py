@@ -43,6 +43,7 @@ def _run(script, dry=False):
     show_default=True
 )
 @click.option('--cross-subnet', is_flag=True, help="using vxlan, aka use flannel/Directrouting or calico/VXLANCrossSubnet")
+@click.option('--using-docker', is_flag=True, help="using docker as container runtime, otherwise using containerd")
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_master_node(dry, **values):
     _run(_get_script_v2('k8s-bootstrap-master.j2', **values), dry)
@@ -51,6 +52,7 @@ def k8s_bootstrap_master_node(dry, **values):
 @click.command(short_help="Bootstrap worker node")
 @click.option("--kubernetes-version", default='1.23.6', show_default=True)
 @click.option("--ip", "master_ip", required=True, help='Master node global IP address')
+@click.option('--using-docker', is_flag=True, help="using docker as container runtime, otherwise using containerd")
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_worker_node(dry, **values):
     _run(_get_script_v2('k8s-bootstrap-worker.j2', **values), dry)

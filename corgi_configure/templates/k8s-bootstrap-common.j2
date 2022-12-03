@@ -5,11 +5,14 @@ APT_KUBERNETES_VERSION=${KUBERNETES_VERSION}-00
 # Install common packages
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
+# apt-get dist-upgrade -y
 apt-get install apt-transport-https ca-certificates curl software-properties-common -y
 
 # Adding apt repo
+{%- if using_docker %}
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+{%- endif %}
 curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 # Add kubernetes sources list into the sources.list directory
 cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
@@ -17,6 +20,7 @@ deb https://apt.kubernetes.io/ kubernetes-xenial main
 EOF
 apt-get update -y
 
+{%- if using_docker %}
 # Install docker container engine
 apt-get install docker-ce -y
 
@@ -32,11 +36,79 @@ cat <<EOF >/etc/docker/daemon.json
 EOF
 systemctl enable docker
 systemctl restart docker
+{%- else %}
+# Install containerd
+
+# enable kernel modules
+modprobe br_netfilter
+modprobe overlay
+cat >/etc/modules-load.d/containerd.conf <<EOF
+br_netfilter
+overlay
+EOF
+
+# not neccessary to install these, nerdctl-full includes all of these
+# wget https://github.com/containerd/containerd/releases/download/v1.6.10/containerd-1.6.10-linux-amd64.tar.gz
+# tar Cxzvf /usr/local containerd-1.6.10-linux-amd64.tar.gz
+# wget https://github.com/opencontainers/runc/releases/download/v1.1.4/runc.amd64
+# install -m 755 runc.amd64 /usr/local/sbin/runc
+# wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+# mkdir -p /opt/cni/bin
+# tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.1.1.tgz
+
+cat >/etc/systemd/system/containerd.service <<EOF
+[Unit]
+Description=containerd container runtime
+Documentation=https://containerd.io
+After=network.target local-fs.target
+
+[Service]
+#uncomment to enable the experimental sbservice (sandboxed) version of containerd/cri integration
+#Environment="ENABLE_CRI_SANDBOXES=sandboxed"
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/containerd
+
+Type=notify
+Delegate=yes
+KillMode=process
+Restart=always
+RestartSec=5
+# Having non-zero Limit*s causes performance problems due to accounting overhead
+# in the kernel. We recommend using cgroups to do container-local accounting.
+LimitNPROC=infinity
+LimitCORE=infinity
+LimitNOFILE=infinity
+# Comment TasksMax if your systemd version does not supports it.
+# Only systemd 226 and above support this version.
+TasksMax=infinity
+OOMScoreAdjust=-999
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now containerd
+
+mkdir -p /etc/containerd/
+containerd config default > /etc/containerd/config.toml
+# https://kubernetes.io/zh-cn/docs/setup/production-environment/container-runtimes/
+# make sure 'cgroupDriver: systemd' is in /var/lib/kubelet/config.yaml
+sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+systemctl restart containerd
+
+# using nerdctl
+wget https://github.com/containerd/nerdctl/releases/download/v1.0.0/nerdctl-full-1.0.0-linux-amd64.tar.gz
+tar Cxzvvf /usr/local nerdctl-full-1.0.0-linux-amd64.tar.gz
+
+{%- endif %}
+
 
 # iptables needs to handle the traffic passing through the bridge
 cat >>/etc/sysctl.d/kubernetes.conf<<EOF
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
 EOF
 sysctl --system
 
