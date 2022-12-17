@@ -19,6 +19,10 @@ def cli():
 def openssl():
     pass
 
+@cli.command(short_help='Find DHCP Server')
+@click.option("--interface", '-i', default='eth0', show_default=True)
+def dhcp_discover(interface):
+    print(f'nmap -e {interface} --script broadcast-dhcp-discover')
 
 @cli.command(short_help='Shell reflection')
 @click.option("--port", '-p', default=48080, type=int, help='Listening port on server', show_default=True)
@@ -32,6 +36,28 @@ def shell_reflect(port, server):
     print(client_cmd)
     pass
 
+@cli.command(short_help='Keep screen awake')
+@click.option('--failsafe/--no-failsafe', default=False)
+@click.option('--scale', '-s', type=int, default=1)
+@click.option('--interval', '-i', type=int, default=120)
+def keep_screen_awake(failsafe, scale, interval):
+    from itertools import cycle
+    import pyautogui
+    import time
+
+    print("pyautogui.FAILSAFE:", failsafe)
+    print("scale(px):", scale)
+    print("interval(s):", interval)
+    pyautogui.FAILSAFE = failsafe
+    it = cycle([scale, -scale])
+    if not hasattr(pyautogui, 'size'):
+        print("No mouse in this OS!")
+        return
+    while True:
+        logger.info("moving ...")
+        pyautogui.move(next(it), 0)
+        time.sleep(interval)
+    pass
 
 @cli.command(short_help='Remote forward')
 @click.option("--outside-port", '-op', default=48080, type=int, help='Tunnel listening port on outside', show_default=True)

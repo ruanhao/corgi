@@ -1,8 +1,9 @@
 import tempfile
 import os
 import logging
+from functools import partial
 from logging.handlers import RotatingFileHandler
-from tabulate import tabulate
+from hprint import pretty_print
 import subprocess
 import sys
 import signal
@@ -11,8 +12,6 @@ from contextlib import contextmanager
 # from threading import Thread
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
-import json
-from pprint import pformat
 import traceback
 from icecream import ic
 from datetime import datetime
@@ -22,14 +21,6 @@ logger = logging.getLogger(__name__)
 debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 nbsr_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='nbsr')
-
-def _log_and_print(output, pretty=False):
-    # if debug:
-    #     logger.debug(f'{output}'.rstrip())
-    if pretty:
-        echo(pformat(output))
-    else:
-        echo(output)
 
 class UnexpectedEndOfStream(Exception): pass
 
@@ -77,7 +68,18 @@ class NonBlockingStreamReader:
 def ic_time_format():
     return f'\n{datetime.now()}| '
 
+
+def install_print_with_flush():
+    try:
+        builtins = __import__('__builtin__')
+    except ImportError:
+        builtins = __import__('builtins')
+
+    setattr(builtins, 'print0', print)
+    setattr(builtins, 'print', partial(print, flush=True))
+
 def config_logging(name, level=None):
+    install_print_with_flush()
     ic.configureOutput(prefix=ic_time_format, includeContext=True)
     ic.disable()
     # if '-ic' in sys.argv:
@@ -134,83 +136,6 @@ def get(obj, key, default='n/a'):
         return default
 
 
-def json_print(data):
-    if isinstance(data, dict):
-        _log_and_print(json.dumps(data, indent=4))
-    elif isinstance(data, list):
-        try:
-            _log_and_print(json.dumps([dict(d) for d in data], indent=4))
-        except Exception:
-            try:
-                _log_and_print([dict(d) for d in data], True)
-            except Exception:
-                _log_and_print(data)
-    else:
-        _log_and_print(data)
-
-
-def pretty_print(data, json_format=False, mappings=None, x=False, offset=0, header=True, tf='simple', raw=False, numbered=False):
-    if not data:
-        return
-    if json_format is True:
-        json_print(data)
-    elif not x and numbered:
-        tabulate_numbered_print(data, mappings, offset=offset)
-    else:
-        return tabulate_print(data, mappings, x, offset, header, tf=tf, raw=raw)
-
-def x_print(records, headers, offset=0, header=True):
-    headers = list(headers)
-    left_max_len = max(len(max(headers, key=len)), len(f"-[ RECORD {len(records) + offset} ]-")) + 1
-    right_max_len = max(len(str(max(record, key=lambda item: len(str(item))))) for record in records) + 1
-    for i, record in enumerate(records, 1 + offset):
-        if header:
-            _log_and_print(f'-[ RECORD {i} ]'.ljust(left_max_len, '-') + '+' + '-' * right_max_len)
-        for j, v in enumerate(record):
-            _log_and_print(f'{headers[j]}'.ljust(left_max_len) + '| ' + str(v).ljust(right_max_len))
-
-
-def tabulate_print(data, mappings, x=False, offset=0, header=True, tf='simple', raw=False):
-    if not mappings:
-        ks = data[0].keys()
-        mappings = dict(zip(ks, ks))
-    headers = mappings.keys()
-    tabdata = []
-    for item in data:
-        attrs = []
-        for h in headers:
-            k = mappings[h]
-            if isinstance(k, tuple):
-                (k0, func) = k
-                attrs.append(func(get(item, k0)))
-            else:
-                attrs.append(get(item, k))
-        tabdata.append(attrs)
-    if x:
-        x_print(tabdata, headers, offset, header)
-    else:
-        output = tabulate(tabdata, headers=headers if header else (), tablefmt=tf)
-        if raw:
-            return output
-        _log_and_print(output)
-
-def tabulate_numbered_print(data, mappings, offset=0):
-    mappings = {'No': '_no', **mappings}
-    headers = mappings.keys()
-    tabdata = []
-    for idx, item in enumerate(data, start=1 + offset):
-        attrs = []
-        item['_no'] = idx
-        for h in headers:
-            k = mappings[h]
-            if isinstance(k, tuple):
-                (k0, func) = k
-                attrs.append(func(get(item, k0)))
-            else:
-                attrs.append(get(item, k))
-        tabdata.append(attrs)
-    _log_and_print(tabulate(tabdata, headers=headers))
-
 class NoKeyboardInterrupt:
 
     def __enter__(self):
@@ -235,7 +160,7 @@ def run_script(command, capture=False, realtime=False, opts='', dry=False):
     """When realtime == True, stderr will be redirected to stdout"""
     logger.debug(f"Running subprocess: [{command}] (capture: {capture})")
     if dry:
-        _log_and_print(command)
+        print(command)
         return
     preexec_options = {}
     if sys.platform.startswith('win'):

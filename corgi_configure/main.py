@@ -25,6 +25,25 @@ def cli():
     pass
 
 @cli.command()
+@click.option('--dry', is_flag=True)
+@click.option('--root-dir', '-d', default='/srv/tftp', help='root directory', show_default=True)
+@click.option('--port', '-p', default=69, type=int, show_default=True)
+def tftp_server(dry, root_dir, port):
+    script = f"""sudo apt-get install tftpd-hpa -y
+cat <<EOF | sudo tee /etc/default/tftpd-hpa
+TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="{root_dir}"
+TFTP_ADDRESS=":{port}"
+TFTP_OPTIONS="--secure --create"
+EOF
+sudo chmod 777 {root_dir}
+sudo mkdir -p {root_dir}
+sudo systemctl restart tftpd-hpa.service
+"""
+    run_script_as_root_live(script, dry=dry)
+    pass
+
+@cli.command()
 @click.option('--device', '-d', required=True, help='Specify block device')
 @click.option('--mountpoint', '-m', required=True)
 @click.option('--filesystem', '-fs', default='ext4', show_default=True)

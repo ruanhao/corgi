@@ -2,7 +2,6 @@ requests
 click
 tabulate
 troposphere
-colorama
 jinja2
 awacs
 redis==4.3.1
@@ -12,3 +11,5 @@ psutil
 flask
 icecream
 waitress
+pyautogui
+hprint
