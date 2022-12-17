@@ -83,8 +83,9 @@ def delete(ctx, vm):
 @click.option('--mem', required=False, default=8192, help="Memory (MB)")
 @click.option('--dry', is_flag=True)
 @click.option('--name', '-n', required=False, help="VM name")
+@click.option('--poweron/--no-poweron', default=True)
 @click.pass_context
-def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem, dry, name):
+def deploy_ova(ctx, ova_path, datastore, resource_pool, folder, spec_path, cpu, mem, dry, name, poweron):
     logger.info(f"ova_path: {ova_path}, rp: {resource_pool}, ds: {datastore}, folder: {folder}")
     filename = ova_path.split('/')[-1].replace('.ova', '')
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -116,7 +117,7 @@ export GOVC_DATASTORE={datastore}
 export GOVC_RESOURCE_POOL={resource_pool}
 govc import.ova -options={spec_path} --name={vm_name} {ova_path} && \\
 govc vm.change -debug -vm {(folder if folder else default_folder) + "/" + vm_name} -c {cpu} -m {mem} && \\
-govc vm.power  -on {(folder if folder else default_folder) + "/" + vm_name}
+govc vm.power  -{"on" if poweron else "off"} {(folder if folder else default_folder) + "/" + vm_name}
 """
     if dry:
         click.echo(cmd)
