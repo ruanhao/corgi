@@ -13,3 +13,4 @@ icecream
 waitress
 pyautogui
 hprint
+tqdm

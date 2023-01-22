@@ -3,11 +3,10 @@ import logging
 import datetime
 from .vmagent import Agent as VmAgent
 from .folderagent import Agent as FolderAgent
-from corgi_common import tabulate_print, run_script
+from corgi_common import pretty_print, run_script
 import json
 import os
 import tempfile
-import subprocess
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -43,7 +42,7 @@ def list_vm(ctx, on, hosts, folder_names):
     assert r.ok, r.text
     data = r.json()['value']
     data = sorted(data, key=lambda v: v['power_state'], reverse=True)
-    tabulate_print(data, {
+    pretty_print(data, {
         'vm': 'vm',
         'Mem': 'memory_size_MiB',
         'Power': 'power_state',
@@ -116,8 +115,10 @@ export GOVC_PASSWORD={ctx.obj['password']}
 export GOVC_DATASTORE={datastore}
 export GOVC_RESOURCE_POOL={resource_pool}
 govc import.ova -options={spec_path} --name={vm_name} {ova_path} && \\
-govc vm.change -debug -vm {(folder if folder else default_folder) + "/" + vm_name} -c {cpu} -m {mem} && \\
-govc vm.power  -{"on" if poweron else "off"} {(folder if folder else default_folder) + "/" + vm_name}
+govc vm.change -debug -vm {(folder if folder else default_folder) + "/" + vm_name} -c {cpu} -m {mem} """
+    if poweron:
+        cmd += f""" && \\
+govc vm.power -on {(folder if folder else default_folder) + "/" + vm_name}
 """
     if dry:
         click.echo(cmd)

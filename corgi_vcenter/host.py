@@ -1,7 +1,7 @@
 import click
 import logging
 from .hostagent import Agent as HostAgent
-from corgi_common import tabulate_print
+from corgi_common import pretty_print
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -20,7 +20,7 @@ def list_hosts(ctx):
     r = agent.list_hosts()
     assert r.ok, r.text
     data = r.json()['value']
-    tabulate_print(data, {
+    pretty_print(data, {
         'Host': 'host',
         'Name': 'name',
         'Conn_State': 'connection_state',

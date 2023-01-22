@@ -59,15 +59,29 @@ def keep_screen_awake(failsafe, scale, interval):
         time.sleep(interval)
     pass
 
+@cli.command(short_help='Click later')
+@click.option('--failsafe/--no-failsafe', default=False)
+@click.option('--seconds', '-s', type=int, default=5)
+def click_later(failsafe, seconds):
+    import pyautogui
+    import time
+
+    pyautogui.FAILSAFE = failsafe
+    time.sleep(seconds)
+    pyautogui.click()
+    logger.info("clicked ...")
+
 @cli.command(short_help='Remote forward')
-@click.option("--outside-port", '-op', default=48080, type=int, help='Tunnel listening port on outside', show_default=True)
+@click.option("--outside-port", '-op', default=48080, type=int, help='Tunnel listening port on outside, effective only in socat mode', show_default=True)
 @click.option("--outside-listening-port", '-ol', default=18080, type=int, help='Application listening port on outside', show_default=True)
 @click.option("--outside", '-o', help='Outside hostname/IP', required=True)
 @click.option("--proxy-ip", '-pi', help='IP proxied by inside', default='localhost', show_default=True)
 @click.option("--proxy-port", '-pp', help='Port proxied by inside', required=True)
 @click.option("--socat", is_flag=True)
 @click.option("--username", '-u', default='<username>', show_default=True)
-def remote_port_forward(outside, outside_port, outside_listening_port, proxy_ip, proxy_port, socat, username):
+@click.option("--autogui", is_flag=True)
+@click.option("--dry", is_flag=True)
+def remote_port_forward(outside, outside_port, outside_listening_port, proxy_ip, proxy_port, socat, username, autogui, dry):
     '''Remote port forward using ssh (prefered) or socat (one-time-use)'''
     if socat:
         # no need to fork, tunnel can be used only once
@@ -80,8 +94,16 @@ def remote_port_forward(outside, outside_port, outside_listening_port, proxy_ip,
         return
 
     cmd = f"ssh -f -N -R {outside_listening_port}:{proxy_ip}:{proxy_port} {username}@{outside}"
-    print(cmd)
+    if autogui:
+        import pyautogui
+        import time
 
+        time.sleep(3)
+        pyautogui.write(cmd, interval=0.2)
+        if not dry:
+            pyautogui.press('enter')
+    else:
+        print(cmd)
 
 @openssl.command()
 @click.option('--port', '-p', default=443, type=int, show_default=True)

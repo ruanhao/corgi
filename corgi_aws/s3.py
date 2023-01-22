@@ -4,7 +4,10 @@ import json
 import logging
 import boto3
 from corgi_common.loggingutils import fatal, info
+from hprint import hprint as pretty_print
 import tempfile
+from tqdm import tqdm
+import botocore
 
 
 client = boto3.client('s3')
@@ -35,6 +38,77 @@ def s3():
 @click.option("--bucket-name", '-n')
 def force_delete_bucket(bucket_name):
     _force_delete(bucket_name)
+
+@s3.command(help='download dir in bucket')
+@click.argument("bucket-name", required=True)
+@click.argument("prefix", default='')
+def download_dir(bucket_name, prefix):
+    s3_resource = boto3.resource('s3')
+    bucket = s3_resource.Bucket(bucket_name)
+    for obj in tqdm(bucket.objects.filter(Prefix=prefix)):
+        if not os.path.exists(os.path.dirname(obj.key)):
+            # print(os.path.dirname(obj.key))
+            if os.path.dirname(obj.key):
+                os.makedirs(os.path.dirname(obj.key))
+        # print(f"downloading {obj.key} ...")
+        try:
+            bucket.download_file(obj.key, obj.key) # save to same path
+        except Exception as e:
+            click.echo(str(e), err=True)
+            pass
+
+@s3.command(help='download file in bucket')
+@click.argument("bucket-name", required=True)
+@click.argument("key", required=True)
+@click.argument("localfile", required=False)
+def download(bucket_name, key, localfile):
+    s3 = boto3.resource('s3')
+    localfile = localfile or  os.path.basename(key)
+    try:
+        s3.Bucket(bucket_name).download_file(ic(key), ic(localfile))
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == "404":
+            print("The object does not exist.")
+        else:
+            raise
+
+    # resource = boto3.resource('s3')
+    # my_bucket = resource.Bucket(bucket_name)
+    # my_bucket.download_file(file_name, 'test.png')
+    pass
+
+
+@s3.command(help='ls bucket')
+@click.argument("bucket-name", required=False)
+@click.option("--region-name", '-r')
+def ls(bucket_name, region_name):
+    if region_name:
+        s3 = boto3.client("s3", region_name=ic(region_name))
+    else:
+        s3 = boto3.client("s3")
+    if bucket_name:
+        tokens = bucket_name.split('/')
+        prefix = ''
+        if len(tokens) > 1 and tokens[1]:
+            prefix = bucket_name[len(tokens[0]):]
+            bucket_name = tokens[0]
+
+        bucket_name = bucket_name.rstrip('/')
+        response = s3.list_objects_v2(
+            Bucket=ic(bucket_name),
+            Prefix=ic(prefix),
+            # Delimiter='/',
+            MaxKeys=1000
+        )
+        contents = response.get('Contents', [])
+        pretty_print(contents, mappings={
+            'Key': 'Key',
+            'Size': 'Size',
+            'LastModified': 'LastModified'
+        })
+    else:
+        for bucket in boto3.resource('s3').buckets.all():
+            print(bucket.name + '/')
 
 
 @s3.command(help="Create static web hosting bucket")

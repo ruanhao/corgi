@@ -13,14 +13,16 @@ from contextlib import contextmanager
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import traceback
-from icecream import ic
-from datetime import datetime
+from icecream import ic, install as install_ic
+from datetime import datetime, timezone
 from click import echo
 
 logger = logging.getLogger(__name__)
 debug = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 nbsr_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='nbsr')
+
+tabulate_print = pretty_print   # legecy code
 
 class UnexpectedEndOfStream(Exception): pass
 
@@ -82,6 +84,7 @@ def config_logging(name, level=None):
     install_print_with_flush()
     ic.configureOutput(prefix=ic_time_format, includeContext=True)
     ic.disable()
+    install_ic()
     # if '-ic' in sys.argv:
     #     ic.enable()
     #     sys.argv.remove('-ic')
@@ -266,3 +269,6 @@ def assert_that(condition_to_fulfill, msg):
     if not condition_to_fulfill:
         traceback.print_stack()
         bye(msg)
+
+def utc_to_local(utc_dt):
+    return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
