@@ -1,5 +1,15 @@
 from datetime import datetime
 
+def time_str(ts0):
+    try:
+        ts = int(ts0)
+    except Exception:
+        return ''
+    if len(str(ts0)) > 10:
+        ts = int(ts / 1000)
+    date_time = datetime.fromtimestamp(ts)
+    return date_time.strftime("%m/%d/%Y %H:%M:%S")
+
 def now():
     return datetime.now()
 

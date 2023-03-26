@@ -1,7 +1,7 @@
 import tempfile
 import os
 import logging
-from functools import partial
+from functools import partial, wraps
 from logging.handlers import RotatingFileHandler
 from hprint import pretty_print
 import subprocess
@@ -272,3 +272,14 @@ def assert_that(condition_to_fulfill, msg):
 
 def utc_to_local(utc_dt):
     return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
+
+def cached(func):
+    obj = None
+
+    @wraps(func)
+    def inner(*args, **kwargs):
+        nonlocal obj
+        if obj is None:
+            obj = func(*args, **kwargs)
+        return obj
+    return inner

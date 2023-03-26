@@ -20,4 +20,13 @@ def info(msg):
     mod = inspect.getmodule(frm[0])
     logger = getattr(mod, 'logger', _logger)
     logger.info(msg)
-    print(msg)
+    if logger.isEnabledFor(logging.INFO):
+        print(msg)
+
+def debug(msg):
+    frm = inspect.stack()[1]
+    mod = inspect.getmodule(frm[0])
+    logger = getattr(mod, 'logger', _logger)
+    logger.debug(msg)
+    if logger.isEnabledFor(logging.DEBUG):
+        print(msg)
