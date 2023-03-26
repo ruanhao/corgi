@@ -22,6 +22,7 @@ config = {
         'corgi_vcenter': ['*'],
         'corgi_cisco': ['*'],
         'corgi_misc': ['*'],
+        'corgi_pg': ['*'],
         'corgi_forfun': ['*'],
         'corgi_aws': ['*', 'templates/*'],
         'corgi_build': ['*', 'templates/*'],
@@ -42,6 +43,7 @@ config = {
             'corgi_misc = corgi_misc.main:main',
             'corgi_tcpdump = corgi_tcpdump.main:main',
             'corgi_forfun = corgi_forfun.main:main',
+            'corgi_pg = corgi_pg.main:main',
             'corgi_cisco = corgi_cisco.main:main',
         ]
     },
