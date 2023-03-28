@@ -6,7 +6,8 @@ from corgi_common.pathutils import get_local_file_path
 from .select import select
 from .dml import dml
 from .ddl import ddl
-from .recipes import recipes
+from .types import types
+from .condition import condition
 from .constraint import constraint
 
 logger = logging.getLogger(__name__)
@@ -14,22 +15,7 @@ logger = logging.getLogger(__name__)
 
 @click.group(help="tutorial scripts for https://www.postgresqltutorial.com/")
 @click.pass_context
-@click.option('--hostname', envvar='CORGI_PG_HOST', show_default=True, required=True)
-@click.option('--port', envvar='CORGI_PG_PORT', default=5672, type=int)
-@click.option('--user', envvar='CORGI_PG_USER', required=True)
-@click.option('--database', envvar='CORGI_PG_DATABASE', default='dvdrental')
-@click.option('--password', '-p', envvar='CORGI_PG_PASSWORD')
-@click.option('--json', '-json', 'as_json', is_flag=True)
-@click.option('-x', is_flag=True)
-def tutorial(ctx, hostname, port, user, password, database, as_json, x):
-    ctx.ensure_object(dict)
-    ctx.obj['user'] = user
-    ctx.obj['password'] = password
-    ctx.obj['database'] = database
-    ctx.obj['host'] = hostname
-    ctx.obj['port'] = port
-    ctx.obj['as_json'] = as_json
-    ctx.obj['x'] = x
+def tutorial(ctx):
     pass
 
 @tutorial.command()
@@ -46,10 +32,6 @@ def test(ctx, statement):
         execute(ctx)
 #    print("test")
 
-@tutorial.command()
-@click.pass_context
-def tables(ctx):
-    execute(ctx, """SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE schemaname = 'public';""")
 
 @tutorial.command(short_help="drop/reload database")
 @click.pass_context
@@ -89,5 +71,6 @@ def reload(ctx):
 tutorial.add_command(select, "query")
 tutorial.add_command(dml)
 tutorial.add_command(ddl)
-tutorial.add_command(recipes)
+tutorial.add_command(condition)
 tutorial.add_command(constraint)
+tutorial.add_command(types)

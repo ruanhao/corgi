@@ -1,5 +1,6 @@
 import click
 from .pg_common import execute
+from corgi_common.scriptutils import run_script
 
 def _create_table_check(ctx):
     execute(ctx, """
@@ -163,3 +164,93 @@ VALUES ('John', 'Doe', '1972-01-01', '2015-07-01', - 100000);
         """)
     except Exception as e:
         print(e)
+
+@constraint.command()
+@click.pass_context
+def check_not_all_null(ctx):
+    # want either username or email column of the user tables is not null or empty
+    execute(ctx, """
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+ id serial PRIMARY KEY,
+ username VARCHAR (50),
+ password VARCHAR (50),
+ email VARCHAR (50),
+ CONSTRAINT username_email_notnull CHECK (
+   NOT (
+     ( username IS NULL  OR  username = '' )
+     AND
+     ( email IS NULL  OR  email = '' )
+   )
+ )
+);
+    """)
+    # The following statement works.
+    execute(ctx, """
+INSERT INTO users (username, email)
+VALUES
+    ('user1', NULL),
+    (NULL, 'email1@example.com'),
+    ('user2', 'email2@example.com'),
+    ('user3', '');
+    """)
+
+    # violates the CHECK constraint:
+    try:
+        execute(ctx, """
+INSERT INTO users (username, email)
+VALUES
+    (NULL, NULL),
+    (NULL, ''),
+    ('', NULL),
+    ('', '');
+        """)
+    except Exception as e:
+        print(e)
+
+
+
+@constraint.command()
+@click.pass_context
+def unique(ctx):
+    execute(ctx, """
+DROP TABLE IF EXISTS person;
+CREATE TABLE person (
+    id SERIAL  PRIMARY KEY,
+    first_name VARCHAR (50),
+    last_name  VARCHAR (50),
+    email      VARCHAR (50),
+    UNIQUE(email)
+);
+    """)
+
+@constraint.command(short_help='Adding unique constraint using a unique index')
+@click.pass_context
+def unique_using_index(ctx):
+    execute(ctx, """
+DROP TABLE IF EXISTS equipment;
+CREATE TABLE equipment (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR (50) NOT NULL,
+    equip_id VARCHAR (16) NOT NULL
+);
+    """)
+
+    _rc, stdout, _stderr = run_script(f"psql postgresql://{ctx.obj['user']}:@{ctx.obj['host']}:{ctx.obj['port']}/{ctx.obj['database']}  -c '\d equipment;'")
+    print(stdout)
+
+    # create a unique index based on the 'equip_id' column.
+    execute(ctx, """
+--CREATE UNIQUE INDEX CONCURRENTLY equipment_equip_id
+CREATE UNIQUE INDEX equipment_equip_id
+ON equipment (equip_id);
+    """)
+    # add a unique constraint to the 'equipment' table using the 'equipment_equip_id' index
+    execute(ctx, """
+ALTER TABLE equipment
+ADD CONSTRAINT unique_equip_id
+UNIQUE USING INDEX equipment_equip_id;
+    """)
+
+    _rc, stdout, _stderr = run_script(f"psql postgresql://{ctx.obj['user']}:@{ctx.obj['host']}:{ctx.obj['port']}/{ctx.obj['database']}  -c '\d equipment;'")
+    print(stdout)

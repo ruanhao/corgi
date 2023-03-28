@@ -6,6 +6,7 @@ import click
 import sys
 from psycopg2.extras import RealDictCursor
 from hprint import hprint as pprint
+from corgi_common.scriptutils import run_script
 # from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ def pg_query(statement, *args, **kwargs):
 null = click.style("[null]", fg='bright_black')
 
 def execute(ctx, statement='', ddl=False):
+    ic(ctx.obj)
     if not statement:
         statement = sys.stdin.read()
     statement = statement.strip()
@@ -95,4 +97,13 @@ def execute(ctx, statement='', ddl=False):
             pprint(result, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)
     else:
         rows = pg_query(statement, **ctx.obj)
+        # ic(rows)
         pprint(rows, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)
+
+def select_all(ctx, table_name):
+    execute(ctx, f"SELECT * FROM {table_name};")
+
+def psql(ctx, command):
+    _rc, stdout, _stderr = \
+        run_script(f"psql postgresql://{ctx.obj['user']}:@{ctx.obj['host']}:{ctx.obj['port']}/{ctx.obj['database']}  -c '{command};'")
+    print(stdout.strip())

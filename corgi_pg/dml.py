@@ -264,3 +264,47 @@ DO
     """)
     execute(ctx, "select * from customers;")
     pass
+
+@dml.command()
+@click.pass_context
+def delete_duplicates(ctx):
+    execute(ctx, """
+DROP TABLE IF EXISTS basket;
+CREATE TABLE basket(
+    id SERIAL PRIMARY KEY,
+    fruit VARCHAR(50) NOT NULL
+);
+INSERT INTO basket(fruit) values('apple');
+INSERT INTO basket(fruit) values('apple');
+
+INSERT INTO basket(fruit) values('orange');
+INSERT INTO basket(fruit) values('orange');
+INSERT INTO basket(fruit) values('orange');
+
+INSERT INTO basket(fruit) values('banana');
+    """)
+
+    execute(ctx, """
+SELECT
+    id,
+    fruit
+FROM
+    basket;
+    """)
+
+    execute(ctx, """
+DELETE FROM
+    basket a
+        USING basket b
+WHERE
+    a.id < b.id
+    AND a.fruit = b.fruit;
+    """)
+
+    execute(ctx, """
+SELECT
+    id,
+    fruit
+FROM
+    basket;
+    """)
