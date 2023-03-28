@@ -6,6 +6,7 @@ import click
 import sys
 from psycopg2.extras import RealDictCursor
 from hprint import hprint as pprint
+# from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,10 @@ def pg_execute(statement, *args, **kwargs):
         cur.execute(statement)
         # logger.info("Postgres committing ...")
         cur.connection.commit()
+        try:
+            return cur.fetchall()
+        except Exception:
+            pass
 
 def pg_query(statement, *args, **kwargs):
     with pg_cursor(*args, **kwargs) as cur:
@@ -70,14 +75,24 @@ def pg_query(statement, *args, **kwargs):
         result = []
         for row in rows:
             result.append(dict(row))
+            # result.append(OrderedDict(row))
         return result
 
-def execute(ctx, statement=''):
+null = click.style("[null]", fg='bright_black')
+
+def execute(ctx, statement='', ddl=False):
     if not statement:
         statement = sys.stdin.read()
     statement = statement.strip()
-    if not statement.lower().startswith('select'):
-        pg_execute(statement, **ctx.obj)
+    # if not statement.lower().startswith('select'):
+    if ddl or 'select' not in statement.lower():
+        returnings = pg_execute(statement, **ctx.obj)
+        if returnings:
+            result = []
+            for returning in returnings:
+                result.append(dict(returning))
+                # result.append(OrderedDict(returning))
+            pprint(result, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)
     else:
         rows = pg_query(statement, **ctx.obj)
-        pprint(rows, as_json=ctx.obj['as_json'], x=ctx.obj['x'])
+        pprint(rows, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)

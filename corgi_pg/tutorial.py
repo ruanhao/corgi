@@ -3,6 +3,11 @@ import logging
 from .pg_common import execute
 from corgi_common.scriptutils import run_script_live
 from corgi_common.pathutils import get_local_file_path
+from .select import select
+from .dml import dml
+from .ddl import ddl
+from .recipes import recipes
+from .constraint import constraint
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +34,27 @@ def tutorial(ctx, hostname, port, user, password, database, as_json, x):
 
 @tutorial.command()
 @click.pass_context
-def test(ctx):
-    execute(ctx, "select version();")
+@click.argument('statement', required=False)
+def test(ctx, statement):
+    # execute(ctx, "select version();")
+    # execute(ctx, "SELECT first_name FROM customer;")
+    # execute(ctx, "SELECT * FROM customer;")
+    # execute(ctx, "SELECT * FROM rental LIMIT 5;")
+    if statement:
+        execute(ctx, statement)
+    else:
+        execute(ctx)
 #    print("test")
 
-@tutorial.command(help="drop/reload database")
+@tutorial.command()
+@click.pass_context
+def tables(ctx):
+    execute(ctx, """SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE schemaname = 'public';""")
+
+@tutorial.command(short_help="drop/reload database")
 @click.pass_context
 def reload(ctx):
+    """https://www.postgresqltutorial.com/postgresql-getting-started/load-postgresql-sample-database/"""
     import psycopg2
     from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
@@ -50,17 +69,25 @@ def reload(ctx):
     db = ctx.obj['database']
     cur_ob = postgresConnection.cursor()
     try:
-        cur_ob.execute(f"DROP DATABASE {db};")
+        cur_ob.execute(f"DROP DATABASE IF EXISTS {db};")
         cur_ob.execute("CREATE USER postgres SUPERUSER;")
     except Exception:
         pass
-    cur_ob.execute(f"CREATE DATABASE {db};")
+    cur_ob.execute(f"CREATE DATABASE {db} WITH OWNER {ctx.obj['user']};")
 
     dir_path = get_local_file_path("dvdrental")
-    command = f"""pg_restore -h {ctx.obj['host']} -p {ctx.obj['port']} -U {ctx.obj['user']} -d {db}"""
+    command = f"""pg_restore -v -h {ctx.obj['host']} -p {ctx.obj['port']} -U {ctx.obj['user']} -d {db}"""
     if ctx.obj['password']:
         command += """ -W {ctx.obj['password']}"""
     command += f" {dir_path}"
     print("reloading ...")
     run_script_live(command)
+    execute(ctx, """SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE schemaname = 'public';""")
+    print()
     print("done.")
+
+tutorial.add_command(select, "query")
+tutorial.add_command(dml)
+tutorial.add_command(ddl)
+tutorial.add_command(recipes)
+tutorial.add_command(constraint)
