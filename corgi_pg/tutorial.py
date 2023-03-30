@@ -18,20 +18,6 @@ logger = logging.getLogger(__name__)
 def tutorial(ctx):
     pass
 
-@tutorial.command()
-@click.pass_context
-@click.argument('statement', required=False)
-def test(ctx, statement):
-    # execute(ctx, "select version();")
-    # execute(ctx, "SELECT first_name FROM customer;")
-    # execute(ctx, "SELECT * FROM customer;")
-    # execute(ctx, "SELECT * FROM rental LIMIT 5;")
-    if statement:
-        execute(ctx, statement)
-    else:
-        execute(ctx)
-#    print("test")
-
 
 @tutorial.command(short_help="drop/reload database")
 @click.pass_context

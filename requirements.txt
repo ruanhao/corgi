@@ -15,3 +15,4 @@ pyautogui
 hprint
 tqdm
 psycopg2
+stopwatch.py

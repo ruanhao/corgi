@@ -7,6 +7,7 @@ import sys
 from psycopg2.extras import RealDictCursor
 from hprint import hprint as pprint
 from corgi_common.scriptutils import run_script
+# from corgi_common.timeutils import simple_timing
 # from collections import OrderedDict
 
 logger = logging.getLogger(__name__)

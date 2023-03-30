@@ -7,6 +7,7 @@ from .recipes import recipes
 from .pg_common import execute as e, pg_cursor, psql
 import logging
 import sys
+from corgi_common.timeutils import simple_timing
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,20 @@ def tables(ctx):
 def table_describe(ctx, tbl_name):
     psql(ctx, f"\d {tbl_name}")
 
+@cli.command(short_help="show table indexes")
+@click.pass_context
+@click.argument('tbl_name')
+def indexes(ctx, tbl_name):
+    e(ctx, f"""
+SELECT
+    indexname,
+    indexdef
+FROM
+    pg_indexes
+WHERE
+    tablename = '{tbl_name}';
+    """)
+
 @cli.command(short_help="Grant all privileges on all tables in public schema to a role")
 @click.pass_context
 @click.argument('role')
@@ -139,11 +154,52 @@ PASSWORD '{password}';
     """)
     pass
 
+@cli.command(short_help='rebuild all indices in table')
+@click.pass_context
+@click.argument('tbl_name')
+@simple_timing
+def reindex_table(ctx, tbl_name):
+    """\b
+The REINDEX statement rebuilds the index contents from the scratch, which has a similar effect as dropping and recreate of the index.
+However, the locking mechanisms between them are different.
+
+- The REINDEX statement:
+
+  Locks writes but not reads from the table to which the index belongs.
+  Takes an exclusive lock on the index that is being processed, which blocks read that attempts to use the index.
+
+- The DROP INDEX & CREATE INDEX statements:
+
+  First, the DROP INDEX locks both writes and reads of the table to which the index belongs by acquiring an exclusive lock on the table.
+  Then, the subsequent CREATE INDEX statement locks out writes but not reads from the index's parent table. However, reads might be expensive during the creation of the index.
+
+See https://www.postgresqltutorial.com/postgresql-indexes/postgresql-reindex/
+"""
+    e(ctx, f"REINDEX TABLE {tbl_name};")
+
 @cli.command()
+@click.pass_context
+@click.argument('statement', required=False)
+def test(ctx, statement):
+    # execute(ctx, "select version();")
+    # execute(ctx, "SELECT first_name FROM customer;")
+    # execute(ctx, "SELECT * FROM customer;")
+    # execute(ctx, "SELECT * FROM rental LIMIT 5;")
+    if statement:
+        e(ctx, statement)
+    else:
+        e(ctx)
+#    print("test")
+
+@cli.command(short_help='show query plan')
 @click.pass_context
 @click.option('--buffers/--no-buffers')
 @click.argument('statement', required=False)
 def explain(ctx, statement, buffers):
+    """\b
+See:
+  - https://medium.com/geekculture/how-to-read-postgresql-query-plan-df4b158781a1
+    """
     if not statement:
         statement = sys.stdin.read()
     print(50 * '-')
