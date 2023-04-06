@@ -366,9 +366,27 @@ def test(ctx):
     # ic(ISOLATION_LEVEL_READ_COMMITTED)
     # ic(ISOLATION_LEVEL_REPEATABLE_READ)
     # ic(ISOLATION_LEVEL_SERIALIZABLE)
-    while True:
-        e(ctx, "SELECT * FROM accounts ORDER BY id;", desc='test')
-        time.sleep(2)
+
+    # e(ctx, "SELECT * FROM accounts ORDER BY id;", desc='test')
+    # e(
+    #     ctx,
+    #     "UPDATE accounts SET amount = amount * 1.01 where id = 3;",
+    #     desc='test Serialization failures instead of lost updates',
+    #     # commit=False
+    # )
+
+    e(
+        ctx,
+        "SELECT * FROM accounts WHERE client = 'alice';",
+        # "update accounts set amount = 1000 where client = 'alice';",
+        desc='test readonly and deferrable',
+        # commit=False
+        readonly=True,
+        deferrable=True,
+        isolation_level=ISOLATION_LEVEL_SERIALIZABLE
+    )
+
+
     pass
 
 @cli.command(short_help="execute SQL ad-hoc", name='execute')

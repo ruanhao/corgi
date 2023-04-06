@@ -45,34 +45,61 @@ def debug(s, logger=logger):
         print(f'{datetime.now()}|> {s}')
     logger.debug(s)
 
+def _set_connection_readonly(connection, readonly=None):
+    if connection.readonly == readonly:
+        return
+    logger.debug(f"setting readonly as {readonly}, connection:{connection}")
+    connection.readonly = readonly
+
+def _set_connection_deferrable(connection, deferrable=None):
+    if connection.deferrable == deferrable:
+        return
+    logger.debug(f"setting deferrable as {deferrable}, connection:{connection}")
+    connection.deferrable = deferrable
+
+def _set_connection_isolation_level(connection, isolation_level):
+    isolation_level_name = _iso_names[isolation_level]
+    logger.debug(f"setting isolation level as {isolation_level_name}({isolation_level}), connection:{connection}")
+    connection.set_isolation_level(isolation_level);
+    return connection
+
+def _show_connection_info(conn):
+    ic(conn)
+    ic(conn.readonly)
+    ic(conn.deferrable)
+    pass
+
 def _get_pg_conn(
-        host=None, port=45432,
+        host=os.getenv("CORGI_PG_HOST"),
+        port=45432,
         database='cbd', user='cbd', password=None,
         share_conn=True,
+        readonly=None,
+        deferrable=None,
         isolation_level=ISOLATION_LEVEL_READ_COMMITTED,
         **kwargs
 ):
     global _pg_conns
+
     if share_conn and _pg_conns[isolation_level]:
         sc = _pg_conns[isolation_level]
         iso = sc.isolation_level
         iso_name = _iso_names[iso]
-        logger.debug(f"reusing conn: {sc} [isolation:{iso_name}({iso})]")
+        logger.debug(f"[connection reused] {sc} [isolation:{iso_name}({iso})]")
+        _set_connection_readonly(sc, readonly)
+        _set_connection_deferrable(sc, deferrable)
         return sc
-    if not host:
-        host = os.getenv("CORGI_PG_HOST")
+
     try:
         with psycopg2.connect(host=host, port=port, database=database, user=user, password=password) as conn:
-            cur = conn.cursor()
-            cur.execute('SELECT version()')
-            version = cur.fetchone()[0]
-            logger.debug(f"[new conn] [postgres://{user}@{host}:{port})/{database}]: {version}")
+            logger.debug(f"[connection created] [postgres://{user}@{host}:{port})/{database}] server version: {conn.server_version}, protocol version: {conn.protocol_version}")
+            _set_connection_isolation_level(conn, isolation_level)
+            _set_connection_readonly(conn, readonly)
+            _set_connection_deferrable(conn, deferrable)
+            _show_connection_info(conn)
             if share_conn:
                 _pg_conns[isolation_level] = conn
-            logger.debug(f"shared conns: {_pg_conns}")
-            isolation_level_name = _iso_names[isolation_level]
-            logger.debug(f"setting isolation level to {isolation_level_name}({isolation_level})")
-            conn.set_isolation_level(isolation_level);
+                logger.debug(f"connection cached: {_pg_conns}")
             return conn
     except psycopg2.DatabaseError as e:
         fatal(f"failed to connect to postgres: {e}")
@@ -86,6 +113,7 @@ def pg_cursor(host=None, dict_like=True, *args, **kwargs):
     def _execute(query, **kwargs):
         if not query.strip().endswith(';'):
             query += ';'
+
         debug(f"[SQL] {query}")
         return execute0(query, **kwargs)
 
@@ -93,11 +121,12 @@ def pg_cursor(host=None, dict_like=True, *args, **kwargs):
     return cursor
 
 
-def pg_execute(statement, *args, **kwargs):
+def pg_execute(statement, *args, commit=True, **kwargs):
     with pg_cursor(*args, **kwargs) as cur:
         try:
             cur.execute(statement)
-            cur.connection.commit()
+            if commit:
+                cur.connection.commit()
             rows = cur.fetchall()
             return [dict(row) for row in rows]
         except (Exception, psycopg2.DatabaseError) as error:
@@ -125,7 +154,13 @@ def pg_execute(statement, *args, **kwargs):
 
 null = click.style("[null]", fg='bright_black')
 
-def execute(ctx, statement='', raw=False, desc='', as_json=False, x=False, missing_value=null, share_conn=True):
+def execute(
+        ctx, statement='',
+        raw=False, desc='', as_json=False, x=False, missing_value=null,
+        isolation_level=None,
+        share_conn=True, commit=True,
+        readonly=None, deferrable=None,
+):
     if not statement:
         statement = sys.stdin.read()
     statement = statement.strip()
@@ -135,25 +170,19 @@ def execute(ctx, statement='', raw=False, desc='', as_json=False, x=False, missi
     if ctx.obj.get('dry'):
         print(statement)
         return
-    return pprint(
-        pg_execute(statement, share_conn=share_conn, **ctx.obj),
-        as_json=as_json or ctx.obj['as_json'],
-        x=x or ctx.obj['x'],
-        missing_value=missing_value,
-        raw=raw
-    )
-    # if ddl or 'select' not in statement.lower():
-    #     returnings = pg_execute(statement, **ctx.obj)
-    #     if returnings:
-    #         result = []
-    #         for returning in returnings:
-    #             result.append(dict(returning))
-    #             # result.append(OrderedDict(returning))
-    #         pprint(result, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)
-    # else:
-    #     rows = pg_query(statement, **ctx.obj)
-    #     # ic(rows)
-    #     pprint(rows, as_json=ctx.obj['as_json'], x=ctx.obj['x'], missing_value=null)
+    isolation_level0 = ctx.obj['isolation_level']
+    try:
+        if isolation_level:
+            ctx.obj['isolation_level'] = isolation_level
+        return pprint(
+            pg_execute(statement, share_conn=share_conn, commit=commit, readonly=readonly, deferrable=deferrable, **ctx.obj),
+            as_json=as_json or ctx.obj['as_json'],
+            x=x or ctx.obj['x'],
+            missing_value=missing_value,
+            raw=raw
+        )
+    finally:
+        ctx.obj['isolation_level'] = isolation_level0
 
 def select_all(ctx, table_name):
     execute(ctx, f"SELECT * FROM {table_name};")
