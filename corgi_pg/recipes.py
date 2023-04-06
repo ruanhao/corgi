@@ -88,3 +88,15 @@ def table_schema_dump(ctx, table):
     command += f" --table {table} --schema-only"
     rc, stdout, stderr = run_script(command)
     print(stdout)
+
+# @recipes.command(short_help='show how to insert multi rows in one line')
+# @click.pass_context
+# def oneline_insert(ctx):
+#     execute(ctx, """
+# DROP TABLE IF EXISTS mytbl;
+# CREATE TABLE mytbl(id int, name varchar(10));
+
+# INSERT INTO mytbl SELECT random() + 100, 'test' || (100*random())::int from generate_series(1, 100);
+#     """)
+
+#     execute(ctx, 'select * from mytbl;')

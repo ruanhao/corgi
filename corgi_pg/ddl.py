@@ -22,7 +22,7 @@ FROM
     film
 GROUP BY
     rating;
-    """, ddl=True)
+    """)
 
     execute(ctx, "select * from film_rating;")
     pass
@@ -45,8 +45,7 @@ WHERE
 AND rental_duration = 5
 ORDER BY
     title;
-    """, ddl=True)
-
+    """)
     execute(ctx, "select * from film_r;")
 
 @ddl.command(short_help='create table with array column')
