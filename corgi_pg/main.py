@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 
 @click.group(help="CLI tool for Postgres")
 @click.pass_context
-@click.option('--hostname', envvar='CORGI_PG_HOST', show_default=True, required=True)
-@click.option('--port', envvar='CORGI_PG_PORT', default=5672, type=int)
-@click.option('--user', envvar='CORGI_PG_USER', required=True)
-@click.option('--database', envvar='CORGI_PG_DATABASE', default='dvdrental')
-@click.option('--password', '-p', envvar='CORGI_PG_PASSWORD')
+@click.option('--hostname', envvar='PGHOST', show_default=True, required=True)
+@click.option('--port', envvar='PGPORT', default=5672, type=int)
+@click.option('--user', envvar='PGUSER', required=True)
+@click.option('--database', envvar='PGDATABASE', default='dvdrental')
+@click.option('--password', '-p', envvar='PGPASSWORD')
 @click.option('--isolation-level', '-i', envvar='CORGI_PG_ISOLATION_LEVEL', type=int, default=ISOLATION_LEVEL_READ_COMMITTED)
 @click.option('--json', '-json', 'as_json', is_flag=True)
 @click.option('--dry', is_flag=True)
@@ -359,31 +359,21 @@ See https://www.postgresqltutorial.com/postgresql-indexes/postgresql-reindex/
 @cli.command(hidden=True)
 @click.pass_context
 def test(ctx):
-    # import psycopg2
-    # import pdir
-    # print(pdir(psycopg2.extensions))
     # ic(ISOLATION_LEVEL_AUTOCOMMIT)
     # ic(ISOLATION_LEVEL_READ_COMMITTED)
     # ic(ISOLATION_LEVEL_REPEATABLE_READ)
     # ic(ISOLATION_LEVEL_SERIALIZABLE)
 
-    # e(ctx, "SELECT * FROM accounts ORDER BY id;", desc='test')
-    # e(
-    #     ctx,
-    #     "UPDATE accounts SET amount = amount * 1.01 where id = 3;",
-    #     desc='test Serialization failures instead of lost updates',
-    #     # commit=False
-    # )
-
     e(
         ctx,
-        "SELECT * FROM accounts WHERE client = 'alice';",
-        # "update accounts set amount = 1000 where client = 'alice';",
-        desc='test readonly and deferrable',
-        # commit=False
-        readonly=True,
-        deferrable=True,
-        isolation_level=ISOLATION_LEVEL_SERIALIZABLE
+        """
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(
+    id integer GENERATED ALWAYS AS IDENTITY,
+    s text
+);
+CREATE INDEX ON t(s);
+"""
     )
 
 

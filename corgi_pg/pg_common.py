@@ -64,13 +64,14 @@ def _set_connection_isolation_level(connection, isolation_level):
     return connection
 
 def _show_connection_info(conn):
-    ic(conn)
+    logger.info(f"backend pid: {conn.get_backend_pid()}, connection:{conn}")
     ic(conn.readonly)
     ic(conn.deferrable)
+    ic(conn.status)
     pass
 
 def _get_pg_conn(
-        host=os.getenv("CORGI_PG_HOST"),
+        host=os.getenv("PGHOST"),
         port=45432,
         database='cbd', user='cbd', password=None,
         share_conn=True,
@@ -113,8 +114,11 @@ def pg_cursor(host=None, dict_like=True, *args, **kwargs):
     def _execute(query, **kwargs):
         if not query.strip().endswith(';'):
             query += ';'
-
-        debug(f"[SQL] {query}")
+        logger.info(f"""SQL statement ({cursor.connection.get_backend_pid()}):
+****************** SQL ************************
+{query}
+**********************************************""")
+        # logger.info(f"[{cursor.connection.get_backend_pid()}] statement |> {query}")
         return execute0(query, **kwargs)
 
     cursor.execute = _execute
@@ -225,3 +229,6 @@ def get_show_result(ctx, key, extractor=None):
         return (extractor or (lambda value: value))(value)
     finally:
         ctx.obj['as_json'] = as_json0
+
+def create_extension(ctx, extension):
+    execute(ctx, f"CREATE EXTENSION IF NOT EXISTS {extension};")

@@ -62,7 +62,7 @@ FROM
 
 @recipes.command(short_help='see the current pending transactions that are on-going')
 @click.pass_context
-@click.option("--database", '-db', envvar='CORGI_PG_DATABASE', required=True)
+@click.option("--database", '-db', required=True)
 def terminate_conns(ctx, database):
     execute(ctx, f"""
 SELECT
