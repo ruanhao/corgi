@@ -35,6 +35,9 @@ _pg_conns = {
     ISOLATION_LEVEL_SERIALIZABLE: None
 }
 
+def get_share_conn(isolation_level):
+    return _pg_conns[isolation_level]
+
 def fatal(msg):
     click.secho(msg, bg='black', fg='red', bold=True, err=True)
     logger.critical(msg)
@@ -83,8 +86,10 @@ def _get_pg_conn(
     global _pg_conns
 
     if share_conn and _pg_conns[isolation_level]:
+        ic(isolation_level)
         sc = _pg_conns[isolation_level]
         iso = sc.isolation_level
+        ic(iso)
         iso_name = _iso_names[iso]
         logger.debug(f"[connection reused] {sc} [isolation:{iso_name}({iso})]")
         _set_connection_readonly(sc, readonly)
@@ -105,9 +110,21 @@ def _get_pg_conn(
     except psycopg2.DatabaseError as e:
         fatal(f"failed to connect to postgres: {e}")
 
+def create_connection(ctx, isolation_level=ISOLATION_LEVEL_READ_COMMITTED):
+    return _get_pg_conn(
+        host=ctx.obj['host'],
+        port=ctx.obj['port'],
+        database=ctx.obj['database'],
+        user=ctx.obj['user'],
+        password=ctx.obj['password'],
+        share_conn=False,
+        isolation_level=isolation_level
+    )
+
+
 # def pg_cursor(host=None, port=45432, database='cbd', user='cbd', password=None, dict_like=True):
-def pg_cursor(host=None, dict_like=True, *args, **kwargs):
-    cursor = _get_pg_conn(host=host, *args, **kwargs)\
+def pg_cursor(host=None, dict_like=True, connection=None, **kwargs):
+    cursor = (connection or _get_pg_conn(host=host, **kwargs))\
         .cursor(cursor_factory=(RealDictCursor if dict_like else None))
     execute0 = cursor.execute
 
@@ -164,6 +181,7 @@ def execute(
         isolation_level=None,
         share_conn=True, commit=True,
         readonly=None, deferrable=None,
+        connection=None,
 ):
     if not statement:
         statement = sys.stdin.read()
@@ -179,7 +197,7 @@ def execute(
         if isolation_level:
             ctx.obj['isolation_level'] = isolation_level
         return pprint(
-            pg_execute(statement, share_conn=share_conn, commit=commit, readonly=readonly, deferrable=deferrable, **ctx.obj),
+            pg_execute(statement, share_conn=share_conn, commit=commit, readonly=readonly, deferrable=deferrable, connection=connection, **ctx.obj),
             as_json=as_json or ctx.obj['as_json'],
             x=x or ctx.obj['x'],
             missing_value=missing_value,
@@ -232,3 +250,6 @@ def get_show_result(ctx, key, extractor=None):
 
 def create_extension(ctx, extension):
     execute(ctx, f"CREATE EXTENSION IF NOT EXISTS {extension};")
+
+def t_describe(ctx, tbl):
+    psql(ctx, "\d " + tbl)

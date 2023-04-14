@@ -1,6 +1,7 @@
 from . import run_script as _run_script, is_root, bye
 from functools import partial
 import subprocess
+import click
 
 
 run_script = _run_script
@@ -26,3 +27,13 @@ def run_script_as_root_live(script, dry=False):
 def write_to_clipboard(output):
     process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
     process.communicate(output.encode())
+
+def pause(msg='Press Enter to continue...'):
+    input(msg)
+
+def confirm(abort=False):
+    return click.confirm('Do you want to continue?', abort=abort)
+
+def prompt(msg='Please enter:', type=str, default=None):
+    value = click.prompt(msg, type=type, default=default)
+    return value

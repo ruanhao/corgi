@@ -3,11 +3,12 @@
 import click
 import time
 from corgi_common.loggingutils import config_logging
+from corgi_common.scriptutils import pause
 from .tutorial import tutorial
 from .recipes import recipes
 from .index import index
 from .internals import internals
-from .pg_common import execute as e, pg_cursor, psql, get_show_result
+from .pg_common import execute as e, pg_cursor, psql, get_show_result, get_share_conn
 import logging
 import sys
 from corgi_common.timeutils import simple_timing
@@ -31,7 +32,11 @@ logger = logging.getLogger(__name__)
 @click.option('--user', envvar='PGUSER', required=True)
 @click.option('--database', envvar='PGDATABASE', default='dvdrental')
 @click.option('--password', '-p', envvar='PGPASSWORD')
-@click.option('--isolation-level', '-i', envvar='CORGI_PG_ISOLATION_LEVEL', type=int, default=ISOLATION_LEVEL_READ_COMMITTED)
+@click.option(
+    '--isolation-level', '-i', envvar='CORGI_PG_ISOLATION_LEVEL', type=int,
+    default=ISOLATION_LEVEL_READ_COMMITTED,
+    help='auto:0, rc:1, rr:2, s:3'
+)
 @click.option('--json', '-json', 'as_json', is_flag=True)
 @click.option('--dry', is_flag=True)
 @click.option('-x', is_flag=True)
@@ -72,6 +77,13 @@ def table_path(ctx, tbl):
         size0 = e(ctx, f"SELECT size FROM pg_stat_file('{abs_path0}');", raw=True)[0]['size']
         result.append({'path': filepath0, 'size': size0})
     hprint(result)
+
+@cli.command(short_help='show numbers of all pages and all tuples the table')
+@click.pass_context
+@click.argument('tbl')
+def table_pages_and_tuples(ctx, tbl):
+    e(ctx, f"ANALYZE {tbl};")
+    e(ctx, f"""SELECT relpages, reltuples, (reltuples / relpages)::int AS "avg tuples/page" FROM pg_class WHERE relname = '{tbl}';""")
 
 @cli.command(short_help='show column storage type')
 @click.pass_context
@@ -364,20 +376,14 @@ def test(ctx):
     # ic(ISOLATION_LEVEL_REPEATABLE_READ)
     # ic(ISOLATION_LEVEL_SERIALIZABLE)
 
-    e(
-        ctx,
-        """
-DROP TABLE IF EXISTS t;
-CREATE TABLE t(
-    id integer GENERATED ALWAYS AS IDENTITY,
-    s text
-);
-CREATE INDEX ON t(s);
-"""
-    )
+    e(ctx, """
+DROP TABLE IF EXISTS tbl;
+CREATE TABLE tbl (id int PRIMARY KEY, data int);
+CREATE INDEX tbl_data_idx ON tbl (data);
+INSERT INTO tbl SELECT generate_series(1,10000),generate_series(1,10000);
+ANALYZE;
+    """)
 
-
-    pass
 
 @cli.command(short_help="execute SQL ad-hoc", name='execute')
 @click.pass_context
@@ -417,6 +423,21 @@ See:
                 print(row['QUERY PLAN'])
         finally:
             cur.connection.rollback()
+
+
+def _recursive_help(cmd, parent=None, indent=0, include_hidden=False):
+    ctx = click.core.Context(cmd, info_name=cmd.name, parent=parent)
+    if (not cmd.hidden) or include_hidden:
+        print(" " * indent, cmd.get_help(ctx).splitlines()[0])
+    commands = getattr(cmd, 'commands', {})
+    for sub in commands.values():
+        _recursive_help(sub, ctx, indent=indent + 2, include_hidden=include_hidden)
+
+
+@cli.command(name='help', help='dump help for all commands')
+@click.option('--all', '-a', 'include_hidden', is_flag=True)
+def dumphelp(include_hidden):
+    _recursive_help(cli, include_hidden=include_hidden)
 
 cli.add_command(tutorial)
 cli.add_command(recipes)

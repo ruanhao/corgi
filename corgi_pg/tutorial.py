@@ -13,7 +13,7 @@ from .constraint import constraint
 logger = logging.getLogger(__name__)
 
 
-@click.group(help="tutorial scripts for https://www.postgresqltutorial.com/")
+@click.group(help="[command group] tutorial scripts for https://www.postgresqltutorial.com/")
 @click.pass_context
 def tutorial(ctx):
     pass
