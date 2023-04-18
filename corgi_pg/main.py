@@ -6,6 +6,7 @@ from corgi_common.loggingutils import config_logging
 from corgi_common.scriptutils import pause
 from .tutorial import tutorial
 from .recipes import recipes
+from .demo import demo
 from .index import index
 from .internals import internals
 from .pg_common import execute as e, pg_cursor, psql, get_show_result, get_share_conn
@@ -300,8 +301,31 @@ def table_describe(ctx, tbl_name):
 
 @cli.command(short_help="show table indexes")
 @click.pass_context
-@click.argument('tbl_name')
-def indexes(ctx, tbl_name):
+@click.option('--table', '-t', help='table name')
+def indexes(ctx, table):
+    if not table:
+        e(ctx, """
+select
+    t.relname as table_name,
+    i.relname as index_name,
+    a.attname as column_name
+from
+    pg_class t,
+    pg_class i,
+    pg_index ix,
+    pg_attribute a
+where
+    t.oid = ix.indrelid
+    and i.oid = ix.indexrelid
+    and a.attrelid = t.oid
+    and a.attnum = ANY(ix.indkey)
+    and t.relkind = 'r'
+   -- and t.relname like 'mytable'
+order by
+    t.relname,
+    i.relname;
+        """)
+        return
     e(ctx, f"""
 SELECT
     indexname,
@@ -309,7 +333,7 @@ SELECT
 FROM
     pg_indexes
 WHERE
-    tablename = '{tbl_name}';
+    tablename = '{table}';
     """)
 
 @cli.command(short_help="Grant all privileges on all tables in public schema to a role")
@@ -377,12 +401,14 @@ def test(ctx):
     # ic(ISOLATION_LEVEL_SERIALIZABLE)
 
     e(ctx, """
-DROP TABLE IF EXISTS tbl;
-CREATE TABLE tbl (id int PRIMARY KEY, data int);
-CREATE INDEX tbl_data_idx ON tbl (data);
-INSERT INTO tbl SELECT generate_series(1,10000),generate_series(1,10000);
+DROP TABLE IF EXISTS hot;
+CREATE TABLE hot (id int PRIMARY KEY, data text);
+CREATE INDEX hot_data_idx ON hot (data);
+-- INSERT INTO tbl SELECT generate_series(1,10000),generate_series(1,10000);
+INSERT INTO hot(id, data) values (1, 'a');
 ANALYZE;
     """)
+
 
 
 @cli.command(short_help="execute SQL ad-hoc", name='execute')
@@ -443,6 +469,7 @@ cli.add_command(tutorial)
 cli.add_command(recipes)
 cli.add_command(index)
 cli.add_command(internals)
+cli.add_command(demo)
 
 def main():
     config_logging('corgi_pg')

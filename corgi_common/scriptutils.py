@@ -28,8 +28,9 @@ def write_to_clipboard(output):
     process = subprocess.Popen('pbcopy', env={'LANG': 'en_US.UTF-8'}, stdin=subprocess.PIPE)
     process.communicate(output.encode())
 
-def pause(msg='Press Enter to continue...'):
-    input(msg)
+def pause(msg='Press Enter to continue...', skip=False):
+    if not skip:
+        input(msg)
 
 def confirm(abort=False):
     return click.confirm('Do you want to continue?', abort=abort)
