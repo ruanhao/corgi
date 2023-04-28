@@ -9,7 +9,7 @@ from .recipes import recipes
 from .demo import demo
 from .index import index
 from .internals import internals
-from .pg_common import execute as e, pg_cursor, psql, get_show_result, get_share_conn
+from .pg_common import execute as e, pg_cursor, psql, get_show_result, get_share_conn, reload_conf, create_connection
 import logging
 import sys
 from corgi_common.timeutils import simple_timing
@@ -137,6 +137,8 @@ FROM pg_toast.{toast_table};
 @cli.command(short_help='show basic info')
 @click.pass_context
 def info(ctx):
+    print("connection info(dsn):", create_connection(ctx).dsn)
+    print()
     keys = [
         ('server_version', lambda v: v.split()[0]),
         ('data_directory', None),
@@ -368,6 +370,23 @@ LOGIN
 PASSWORD '{password}';
     """)
     pass
+
+@cli.command(short_help='setup log_statement')
+@click.pass_context
+@click.option('--none', is_flag=True, help="set to 'none'")
+@click.option('--ddl', is_flag=True, help="set to 'ddl'")
+@click.option('--mod', is_flag=True, help="set to 'mod'")
+def log_statement(ctx, none, ddl, mod):
+    if none:
+        value = 'none'
+    elif ddl:
+        value = 'ddl'
+    elif mod:
+        value = 'mod'
+    else:
+        value = 'all'
+    e(ctx, f"ALTER SYSTEM SET log_statement = '{value}';", isolation_level=ISOLATION_LEVEL_AUTOCOMMIT)
+    reload_conf(ctx)
 
 @cli.command(short_help='rebuild all indices in table')
 @click.pass_context

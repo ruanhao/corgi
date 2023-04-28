@@ -10,6 +10,8 @@ from .pg_common import (
     show_heap_page,
     show_bt_page_items,
     show_page_layout,
+    create_function_buffercache,
+    show_heap_io
 )
 from corgi_common.scriptutils import pause
 from hprint import hprint
@@ -97,3 +99,16 @@ def heap_page(ctx, tbl, page_number, raw, snapshot, xid):
 @click.option("--page-number", "-n", type=int, default=0, help='nth page of the table')
 def page_layout(ctx, tbl, page_number):
     show_page_layout(ctx, tbl, page_number)
+
+@internals.command(short_help='show buffer caches')
+@click.pass_context
+@click.argument("relation")
+def buffer_cache(ctx, relation):
+    create_function_buffercache(ctx)
+    e(ctx, f"SELECT * FROM buffercache('{relation}');")
+
+@internals.command(short_help='show buffer caches hit/miss')
+@click.pass_context
+@click.argument("relation")
+def buffer_io(ctx, relation):
+    show_heap_io(ctx, relation)

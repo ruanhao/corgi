@@ -88,7 +88,7 @@ def _get_pg_conn(
 
     if share_conn and _pg_conns[isolation_level]:
         sc = _pg_conns[isolation_level]
-        iso = sc.isolation_level
+        iso = sc.isolation_level or ISOLATION_LEVEL_AUTOCOMMIT
         iso_name = _iso_names[iso]
         logger.debug(f"[connection reused] {sc} [isolation:{iso_name}({iso})]")
         _set_connection_readonly(sc, readonly)
@@ -194,7 +194,7 @@ def execute(
         return
     isolation_level0 = ctx.obj['isolation_level']
     try:
-        if isolation_level:
+        if isolation_level is not None:
             ctx.obj['isolation_level'] = isolation_level
         return pprint(
             pg_execute(statement, share_conn=share_conn, commit=commit, readonly=readonly, deferrable=deferrable, connection=connection, **ctx.obj),
@@ -249,6 +249,9 @@ def get_show_result(ctx, key, extractor=None):
         return (extractor or (lambda value: value))(value)
     finally:
         ctx.obj['as_json'] = as_json0
+
+def reload_conf(ctx):
+    execute(ctx, "SELECT pg_reload_conf();", raw=True)
 
 def create_extension(ctx, extension):
     execute(ctx, f"CREATE EXTENSION IF NOT EXISTS {extension};")
@@ -448,3 +451,36 @@ FROM page_header(get_raw_page('{tbl}', {page_number}));
 +---------------------------------------+ {upper}
 |        items (row versions)           |
 +---------------------------------------+ {special}""")
+
+
+def create_function_buffercache(ctx):
+    create_extension(ctx, "pg_buffercache")
+    execute(ctx, """
+DROP FUNCTION IF EXISTS buffercache(regclass);
+-- DROP FUNCTION IF EXISTS buffercache;
+CREATE FUNCTION buffercache(rel regclass) RETURNS TABLE(
+    bufferid integer, relfork text, relblk bigint,
+    isdirty boolean, usagecount smallint, pins integer
+) AS $$
+    SELECT bufferid,
+    CASE relforknumber
+        WHEN 0 THEN 'main'
+        WHEN 1 THEN 'fsm'
+        WHEN 2 THEN 'vm'
+    END,
+    relblocknumber, isdirty, usagecount, pinning_backends
+    FROM pg_buffercache
+    WHERE relfilenode = pg_relation_filenode(rel)
+    ORDER BY relforknumber, relblocknumber;
+    $$ LANGUAGE sql;
+    """)
+
+def show_heap_io(ctx, relation):
+    """heap_blks_hit: cache hit
+heap_blks_read: cache miss
+    """
+    execute(ctx, f"""
+SELECT heap_blks_read, heap_blks_hit
+    FROM pg_statio_all_tables
+WHERE relname = '{relation}';
+    """)
