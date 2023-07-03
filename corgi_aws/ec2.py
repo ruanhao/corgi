@@ -1,11 +1,16 @@
 import click
+import time
 import logging
 import boto3
 from tabulate import tabulate
 from .common import Regions
 from corgi_common import pretty_print, utc_to_local
+from pprint import pprint
+from hprint import hprint
+
 
 ec2_client = boto3.client('ec2')
+client = ec2_client
 logger = logging.getLogger(__name__)
 
 def _regions():
@@ -16,8 +21,148 @@ def _region_location_mapping():
     return {item['code']: item['name'] for item in regions}
 
 @click.group(help="Utils for EC2")
-def ec2():
+@click.pass_context
+@click.option("--dry", is_flag=True)
+@click.option('--region', '-r', envvar='AWS_DEFAULT_REGION', default='us-east-1')
+def ec2(ctx, region, dry):
+    ctx.ensure_object(dict)
+    ctx.obj['dry'] = dry
+    ctx.obj['region'] = region
     pass
+
+@ec2.group(help='[group] snapshot utils')
+@click.pass_context
+def snapshot(ctx):
+    pass
+
+@snapshot.command(short_help='apply snapshot to instance')
+@click.pass_context
+@click.option("--instance-id", '-i', required=True)
+@click.option("--snapshot-id", '-s', required=True)
+def apply(ctx, instance_id, snapshot_id):
+    print(f"stopping instance {instance_id} ...")
+    response = ec2_client.stop_instances(
+        InstanceIds=[instance_id]
+    )
+    logger.info(f"stop_instances response:{response}")
+    waiter = ec2_client.get_waiter('instance_stopped')
+    print("waiting for ready ...")
+    waiter.wait(InstanceIds=[instance_id])
+
+    response = client.describe_instances(InstanceIds=[instance_id])
+    instance = response['Reservations'][0]['Instances'][0]
+    root_device_name = instance['RootDeviceName']
+
+    # hprint(instance, as_json=True)
+
+    device_mappings = ec2_client.describe_instance_attribute(InstanceId=instance_id, Attribute='blockDeviceMapping')['BlockDeviceMappings']
+    volume_id = ([dm['Ebs']['VolumeId'] for dm in device_mappings if dm['DeviceName'] == root_device_name] or [None])[0]
+    if volume_id:
+        print(f"detaching volume {volume_id} ...")
+        response = client.detach_volume(
+            Force=True,
+            InstanceId=instance_id,
+            VolumeId=volume_id,
+        )
+        logger.info("detach volume response:{response}")
+
+    print(f"creating volume from snapshot {snapshot_id} ...")
+    response = client.create_volume(
+        AvailabilityZone=instance['Placement']['AvailabilityZone'],
+        SnapshotId=snapshot_id,
+        TagSpecifications=[
+            {
+                'ResourceType': 'volume',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': f'created from snapshot {snapshot_id}'
+                    },
+                ]
+            },
+        ],
+    )
+    logger.info(f"create volume resonse:{response}")
+    volume_id = response['VolumeId']
+    print(f"volume created:{volume_id}")
+
+    print("waiting for volume availability ...")
+    waiter = client.get_waiter('volume_available')
+    waiter.wait(VolumeIds=[volume_id])
+
+    print(f"attaching volume {volume_id} to instance {instance_id} ...")
+    response = client.attach_volume(
+        Device=root_device_name,
+        InstanceId=instance_id,
+        VolumeId=volume_id,
+    )
+    logger.info(f"attach volume reponse:{response}")
+
+    print(f"starting instance {instance_id} ...")
+    response = ec2_client.start_instances(
+        InstanceIds=[instance_id]
+    )
+    logger.info(f"start_instances response:{response}")
+    waiter = ec2_client.get_waiter('instance_running')
+    print("waiting for ready ...")
+    waiter.wait(InstanceIds=[instance_id])
+
+@snapshot.command(short_help='take snapshot')
+@click.pass_context
+@click.option("--instance-id", '-i', required=True)
+@click.option("--mount-point", '-m', default='/dev/sda1', help='Root device name')
+def create(ctx, instance_id, mount_point):
+    device_mappings = ec2_client.describe_instance_attribute(InstanceId=instance_id, Attribute='blockDeviceMapping')['BlockDeviceMappings']
+    volume_id = ([dm['Ebs']['VolumeId'] for dm in device_mappings if dm['DeviceName'] == mount_point] or [None])[0]
+    assert volume_id, f"cannot find volume id, mapping:{device_mappings}"
+    print(f"creating snapshot for volume {volume_id} ...")
+
+    response = ec2_client.create_snapshot(
+        Description=f'instance:{instance_id}, volume:{volume_id}, device:{mount_point}',
+        # OutpostArn='string',
+        VolumeId=volume_id,
+        TagSpecifications=[
+            {
+                'ResourceType': 'snapshot',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': f'instance:{instance_id}, volume:{volume_id}, device:{mount_point}',
+                    },
+                ]
+            },
+        ],
+        DryRun=ctx.obj['dry']
+    )
+    logger.info(f"create snapshot response:{response}")
+    snapshot_id = response['SnapshotId']
+    print(f"snapshot created: {snapshot_id}")
+
+    waiter = ec2_client.get_waiter('snapshot_completed')
+    print("waiting for snapshot ready ...")
+    waiter.wait(
+        SnapshotIds=[
+            snapshot_id,
+        ],
+        DryRun=ctx.obj['dry']
+    )
+    print("done.")
+
+    # while True:
+    #     response = ec2_client.describe_snapshots(
+    #         SnapshotIds=[snapshot_id],
+    #         DryRun=ctx.obj['dry']
+    #     )
+    #     logger.info(f"describe snapshot response:{response}")
+    #     snapshot = response['Snapshots'][0]
+    #     if snapshot['State'] != 'completed':
+    #         progress = snapshot['Progress']
+    #         print(f"progress: {progress}")
+    #         time.sleep(5)
+    #     else:
+    #         print("done")
+    #         break
+
 
 @ec2.command(help="Show instances")
 @click.option('--region', '-r', envvar='AWS_DEFAULT_REGION', default='us-east-1')
@@ -109,3 +254,27 @@ def ls_cbd_images(release):
 
     data = releases if release else snapshots
     print(tabulate(data, headers=['CreateDate', 'Image', 'Name']))
+
+
+@ec2.command(help="filter images")
+def filter_images():
+    images = ec2_client.describe_images(
+        Owners=['099720109477'],
+        Filters=[
+            {
+                'Name': 'name',
+                'Values': ['ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*']
+            },
+            {
+                'Name': 'virtualization-type',
+                'Values': ['hvm']
+            },
+            {
+                'Name': 'root-device-type',
+                'Values': ['ebs']
+            }
+        ])['Images']
+    snapshots = []
+    for image in images:
+        snapshots.append([image['CreationDate'], image['ImageId'], image['Name']])
+    print(tabulate(snapshots, headers=['CreateDate', 'Image', 'Name']))

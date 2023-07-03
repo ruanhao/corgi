@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import click
 from corgi_common import config_logging, pretty_print, get
-from corgi_common.dateutils import pretty_duration
+from corgi_common.dateutils import pretty_duration, now
 from corgi_common.scriptutils import try_run_script_as_root
 import redis
 import datetime
@@ -317,7 +317,10 @@ def sub(host, port, channel):
     s = r.pubsub()
     s.psubscribe(channel)
     for item in s.listen():
-        print(item)
+        print(now())
+        pretty_print([item], x=True)
+        print()
+        # print(item)
 
 
 @cli.command(help='Publish')

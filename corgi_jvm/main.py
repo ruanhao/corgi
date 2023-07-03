@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 import psutil
 import tempfile
+import OpenSSL.crypto as crypto
 
 logger = logging.getLogger(__name__)
 
@@ -551,6 +552,36 @@ def _jstack(pid, jstack_bin, jcmd, x, top, force_psutil, raw):
     #     '%cpu': 'pcpu',
     # }, x=x)
     pass
+
+@cli.command(short_help='generate script to import cert to java keystore')
+@click.argument('cert', type=click.File('rb'), required=False)
+@click.option('--test', '-t', is_flag=True, help='show script to verify')
+@click.option('--hostname', '-h')
+def keytool_import(cert, test, hostname):
+    """\b
+    generate script to import cert to java keystore.
+    default password is: changeit"""
+    if test:
+        assert hostname, 'must specify <hostname> when doing test'
+        # output = f"""jshell <(echo -e 'import java.net.http.*;\\nvar client = HttpClient.newHttpClient();\\nvar uri = new URI("https://{hostname}");\\nvar request = HttpRequest.newBuilder().uri(uri).build();\\nvar response = client.send(request, HttpResponse.BodyHandlers.ofString());\\nSystem.out.println(response.body());\\n/exit')"""
+        output = f"""jshell <(echo -e '
+        import java.net.http.*;
+        var client = HttpClient.newHttpClient();
+        var uri = new URI("https://{hostname}");
+        var request = HttpRequest.newBuilder().uri(uri).build();
+        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(response.body());
+\\n/exit')"""
+        print(output)
+        return
+    assert cert, 'must specify <cert>'
+    x509 = crypto.load_certificate(crypto.FILETYPE_PEM, cert.read())
+    cn = x509.get_subject().CN
+    alias = cn
+    output = f"""export JAVA_HOME=`jshell <(echo -e 'java.lang.System.out.println(java.lang.System.getProperty("java.home"))\\n/exit')`
+keytool -delete -noprompt -trustcacerts -alias {alias} -keystore $JAVA_HOME/lib/security/cacerts || true
+keytool -importcert -file {cert.name} -keystore $JAVA_HOME/lib/security/cacerts -alias {alias}"""
+    print(output)
 
 def main():
     config_logging('corgi_jvm')
