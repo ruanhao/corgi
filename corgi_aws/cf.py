@@ -1,6 +1,5 @@
 import click
 import logging
-from corgi_common.dateutils import YmdHMS
 from corgi_common.dsutils import flatten
 from corgi_common.loggingutils import info, fatal
 from corgi_common.scriptutils import run_script, write_to_clipboard
@@ -51,7 +50,7 @@ def _user_data(**values):
     return get_rendered('user-data.j2', **values)
 
 def truncate(s, limit=30):
-    return (s[:limit] + '..') if len(s) > limit  else s
+    return (s[:limit] + '..') if len(s) > limit else s
 
 
 def get_instance_id_from_output(stack):
@@ -147,6 +146,7 @@ def ls_stacks(all):
 @click.option('--dry', is_flag=True)
 @click.option('--debug', is_flag=True)
 @click.option('--efs', is_flag=True)
+@click.option('--ingress-ports')
 @click.option('--json', 'json_format', is_flag=True)
 def launch_instances(
         debug,
@@ -160,7 +160,8 @@ def launch_instances(
         dry,
         json_format,
         add_volume,
-        add_ephemeral
+        add_ephemeral,
+        ingress_ports
 ):
     # stack_name += YmdHMS()
     parameters = [
@@ -212,6 +213,29 @@ def launch_instances(
         'ShouldAttach': And(Equals(Ref('AttachVolume'), 'yes'), Equals(Ref('AdditionalVolume'), 'yes')),
     }
 
+    additional_ingress_rules = []
+    for port in [22, 443, 80]:
+        additional_ingress_rules.append(
+            SecurityGroupRule(
+                IpProtocol='tcp',
+                CidrIp='0.0.0.0/0',
+                FromPort=port,
+                ToPort=port
+            )
+        )
+
+    if ingress_ports:
+        for port in ingress_ports.split(","):
+            port = int(port.strip())
+            additional_ingress_rules.append(
+                SecurityGroupRule(
+                    IpProtocol='tcp',
+                    CidrIp='0.0.0.0/0',
+                    FromPort=port,
+                    ToPort=port
+                )
+            )
+
     security_group = SecurityGroup(
         "SecurityGroup",
         GroupDescription=f"In stack {stack_name}",
@@ -226,18 +250,19 @@ def launch_instances(
                 FromPort=-1,  # -1 means every port
                 ToPort=-1
             ),
-            SecurityGroupRule(
-                IpProtocol='tcp',
-                CidrIp='0.0.0.0/0',
-                FromPort=1,
-                ToPort=65535
-            ),
-            SecurityGroupRule(
-                IpProtocol='udp',
-                CidrIp='0.0.0.0/0',
-                FromPort=1,
-                ToPort=65535
-            ),
+            # SecurityGroupRule(
+            #     IpProtocol='tcp',
+            #     CidrIp='0.0.0.0/0',
+            #     FromPort=1,
+            #     ToPort=65535
+            # ),
+            # SecurityGroupRule(
+            #     IpProtocol='udp',
+            #     CidrIp='0.0.0.0/0',
+            #     FromPort=1,
+            #     ToPort=65535
+            # ),
+            *additional_ingress_rules
         ]
     )
 

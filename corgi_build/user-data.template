@@ -1,0 +1,72 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  refresh-installer:
+      update: yes
+  keyboard:
+      layout: us
+  network:
+      network:
+          version: 2
+          ethernets:
+              eth0:
+                 dhcp4: yes
+  apt:
+      primary:
+          - arches: [default]
+            uri: http://archive.ubuntu.com/ubuntu/
+      disable_suites: [backports, updates, security, proposed]
+  storage:
+      swap:
+          size: 0
+      config:
+          - { type: disk, id: disk-0, ptable: gpt, wipe: superblock-recursive, grub_device: true }
+          - { type: partition, id: partition-0, number: 1, device: disk-0, size: 1M, wipe: superblock, flag: bios_grub }
+          - { type: partition, id: partition-1, number: 2, device: disk-0, size: 512M, wipe: superblock, flag: boot }
+          - { type: partition, id: partition-2, number: 3, device: disk-0, size: SWAP_SIZE, wipe: superblock, flag: swap }
+          - { type: partition, id: partition-3, number: 4, device: disk-0, size: -1, wipe: superblock }
+          - { type: format, id: format-0, volume: partition-1, fstype: ext4 }
+          - { type: format, id: format-1, volume: partition-2, fstype: swap }
+          - { type: format, id: format-2, volume: partition-3, fstype: ext4 }
+          - { type: mount, id: mount-0, device: format-0, path: /boot }
+          - { type: mount, id: mount-1, device: format-1, path: none }
+          - { type: mount, id: mount-2, device: format-2, path: / }
+  identity:
+      username: $username
+      hostname: cisco
+      password: "$password"
+  ssh:
+      install-server: yes
+      authorized-keys: []
+      allow-pw: yes
+  user-data:
+      disable_root: yes
+  packages:
+      - ca-certificates
+      - curl
+      - e2fsprogs
+      - iproute2
+      - openssh-server
+      - rsync
+      - sudo
+      - net-tools
+  early-commands:
+      - systemctl stop ssh.service
+  late-commands:
+      - |
+        curtin in-target --target=/target -- /bin/bash -c ' \
+            rm -rf /home/$username/.bash_logout; \
+            mkdir -p /etc/sudoers.d; \
+            chmod 0755 /etc/sudoers.d; \
+            echo "$username ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$username; \
+            chmod 0440 /etc/sudoers.d/$username; \
+            chown -Rf root:root /etc/sudoers.d; \
+            systemctl enable ssh.service; \
+            sed -ie "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"0\"/g" /etc/default/grub; \
+            sed -ie "s/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX=\"net.ifnames=0 biosdevname=0 systemd.unified_cgroup_hierarchy=0\"/g" /etc/default/grub; \
+            sed -ie "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0 biosdevname=0 systemd.unified_cgroup_hierarchy=0\"/g" /etc/default/grub; \
+            update-grub; \
+            update-initramfs -c -k all; \
+            exit 0 \
+        '

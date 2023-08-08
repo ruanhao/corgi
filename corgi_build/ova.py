@@ -26,29 +26,33 @@ def ova():
 
 
 def _prepare_preseed_cfg(username, password, swapsize, os_code):
-    logger.info("Creating common preseed config ...")
-    rendered = ''
-    with open(os.path.join(dir_path, 'preseed.cfg.template'), 'r') as f:
-        tplt = Template(f.read())
-        rendered = tplt.substitute({
-            'SWAP_SIZE': swapsize,
-            'username': username,
-            'password': password
-        })
-    os.makedirs(os.path.join('http', 'ubuntu'))
-    with open(os.path.join('http', 'ubuntu', 'preseed.cfg'), 'w') as f:
-        f.write(rendered)
-
-    logger.info(f"Creating preseed config for {os_code} ...")
-    rendered = ''
-    with open(os.path.join(dir_path, f'preseed-{os_code}.cfg.template'), 'r') as f:
-        tplt = Template(f.read())
-        rendered = tplt.substitute({
-            'username': username,
-        })
-    os.makedirs(os.path.join('http', f'ubuntu-{os_code}'))
-    with open(os.path.join('http', f'ubuntu-{os_code}', 'preseed.cfg'), 'w') as f:
-        f.write(rendered)
+    os.makedirs(os.path.join('http'))
+    if os_code == 'focal':
+        os.makedirs(os.path.join('http', 'ubuntu'))
+        os.makedirs(os.path.join('http', f'ubuntu-{os_code}'))
+        logger.info("Creating common preseed config ...")
+        with open(os.path.join(dir_path, 'preseed.cfg.template'), 'r') as f0:
+            with open(os.path.join('http', 'ubuntu', 'preseed.cfg'), 'w') as f:
+                f.write(Template(f0.read()).substitute({
+                    'SWAP_SIZE': swapsize,
+                    'username': username,
+                    'password': password
+                }))
+        logger.info(f"Creating preseed config for {os_code} ...")
+        with open(os.path.join(dir_path, f'preseed-{os_code}.cfg.template'), 'r') as f0:
+            with open(os.path.join('http', f'ubuntu-{os_code}', 'preseed.cfg'), 'w') as f:
+                f.write(Template(f0.read()).substitute({
+                    'username': username,
+                }))
+    elif os_code == 'jammy':
+        with open(os.path.join('http', 'meta-data'), 'w'):
+            pass
+        with open(os.path.join(dir_path, 'user-data.template'), 'r') as f0:
+            with open(os.path.join('http', 'user-data'), 'w') as f:
+                f.write(Template(f0.read()).substitute({
+                    'username': username,
+                    'password': "$6$rounds=4096$qTkeu80w$rVbH7vdAfjnTEt9DkudHJJ1glfeNSP4Q.nLTHoeY5CfH6NuUYwEmJtsgBjNBFEAxw7L8rGTQ6ilDPRbOqFnFq/"
+                }))
 
 
 def _prepare_ovf(name, os_code, memory, cpu, disk, version):
@@ -73,7 +77,7 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
 @click.option('--memory', '-m', default=1024, type=int, help="Memory (MB)", show_default=True)
 @click.option('--disk', '-d', default=80, type=int, help="Disk size (GB)", show_default=True)
 @click.option('--swap', type=int, help="Swap size (MB)")
-@click.option('--os', "os_code", default='focal', type=click.Choice(['focal']), help="OS code", show_default=True)
+@click.option('--os', "os_code", default='jammy', type=click.Choice(['focal', 'jammy']), help="OS code", show_default=True)
 @click.option('--name', help="OVA filename")
 @click.option('--version', default='1.0.0', help="Version", show_default=True)
 @click.option('--redis-version', help="Install redis")
