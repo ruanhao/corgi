@@ -1,7 +1,7 @@
 import click
 import logging
 import boto3
-from corgi_common import tabulate_print
+from qqutils import hprint
 client = None
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def ls_record(zone):
             if record['Type'] == 'A':
                 result.append({'name': record['Name'], 'value': record['ResourceRecords'][0]['Value'], 'type': record['Type']})
         if result:
-            tabulate_print(result, {
+            hprint(result, mappings={
                 'IP': 'value',
                 'Name': 'name',
                 # 'Type': 'type',

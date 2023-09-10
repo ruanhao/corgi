@@ -12,7 +12,7 @@ flask
 icecream
 waitress
 pyautogui
-hprint
+qqutils
 tqdm
 psycopg2
 stopwatch.py

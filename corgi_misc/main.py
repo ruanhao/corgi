@@ -1,18 +1,19 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import click
-from corgi_common.loggingutils import config_logging
-from corgi_common.scriptutils import run_script
-from corgi_common.dateutils import YmdHMS
-from corgi_common import as_root
 import socket
 import logging
 from icecream import ic
+import codecs
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd
 
 logger = logging.getLogger(__name__)
 
 @click.group(help="Just some script")
-def cli():
+@click.pass_context
+@click.option("--debug", "-v", "verbose", is_flag=True)
+def cli(ctx, verbose):
+    configure_logging('corgi_misc', level=logging.DEBUG if verbose else logging.INFO, setup_ic=True)
     pass
 
 @cli.group(help='[command group] openssl utils')
@@ -309,6 +310,39 @@ def restful_proxy(port, upstream, secure, prod):
         api.run(port=port, debug=logger.isEnabledFor(logging.DEBUG))
 
 
+@cli.command(help='TCP port forwarder')
+@click.pass_context
+@click.option('--local-server', '-l', default='localhost', help='Local server')
+@click.option('--local-port', '-lp', type=int, default=8080, help='Local port')
+@click.option('--remote-server', '-r', default='localhost', help='Remote server')
+@click.option('--remote-port', '-rp', type=int, default=8000, help='Remote port')
+@click.option('--global', '-g', 'using_global', is_flag=True, help='Listen on 0.0.0.0')
+@click.option('--content', '-c', is_flag=True, help='Show content')
+@click.option('--to-file', '-f', is_flag=True, help='Save content to file')
+@click.option('--tls', '-s', is_flag=True, help='Denote TLS connection')
+@click.option('-ss', is_flag=True, help='Denote TLS connection for proxy server')
+def tcp_port_forward(ctx, local_server, local_port, remote_server, remote_port, using_global, content, to_file, tls, ss):
+    if using_global:
+        local_server = '0.0.0.0'
+
+    if content:
+        codecs.register_error('using_dot', lambda e: ('.', e.start + 1))
+
+    def _handle(buffer, direction, src, dst):
+        nonlocal to_file
+        src_ip, src_port = src.getpeername()
+        dst_ip, dst_port = dst.getpeername()
+        content = buffer.decode('ascii', errors='using_dot')
+
+        filename = ('L' if direction else 'R') + f'_{src_ip}_{src_port}_{dst_ip}_{dst_port}.log'
+        if to_file:
+            with from_cwd('__tcpflow__', filename).open('a') as f:
+                f.write(content)
+        click.secho(content, fg='green' if direction else 'yellow')
+        return buffer
+
+    run_proxy(local_server, local_port, remote_server, remote_port, handle=_handle if content else None, tls=tls, tls_server=ss)
+
+
 def main():
-    config_logging('corgi_misc')
     cli()
