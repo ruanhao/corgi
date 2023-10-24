@@ -1,15 +1,19 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import click
+import time
 import socket
 import logging
 from icecream import ic
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread
+from tempfile import NamedTemporaryFile
+import os
 
 logger = logging.getLogger(__name__)
 
-@click.group(help="Just some script")
+
+@click.group(help="Just some script", context_settings=dict(help_option_names=['-h', '--help']))
 @click.pass_context
 @click.option("--debug", "-v", "verbose", is_flag=True)
 def cli(ctx, verbose):
@@ -114,6 +118,15 @@ def show_site_cert(site, port):
     _, stdout, _ = run_script(cmd)
     print(stdout)
     pass
+
+@openssl.command()
+@click.option('--port', '-p', default=443, type=int, show_default=True)
+@click.argument('host', required=True)
+def show_site_ciphers(host, port):
+    cmd = f'nmap --script ssl-enum-ciphers -p {port} {host}'
+    _, stdout, _ = run_script(cmd)
+    print(stdout)
+
 
 @openssl.command()
 @click.option('--days', '-d', default=3650, type=int, show_default=True)
@@ -343,6 +356,118 @@ def tcp_port_forward(ctx, local_server, local_port, remote_server, remote_port, 
 
     run_proxy(local_server, local_port, remote_server, remote_port, handle=_handle if content else None, tls=tls, tls_server=ss)
 
+@cli.group(help='[command group] letsencrypt utils')
+def letsencrypt():
+    pass
+
+def _run_challenge_server(webroot):
+    import flask
+    from flask import request
+
+    ALL_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT', 'OPTIONS', 'TRACE', 'PATCH']
+    api = flask.Flask(__name__)
+
+    def _show_request():
+        path = request.full_path if request.args else request.path
+        remote_port = request.environ.get('REMOTE_PORT')
+        remote = f"{request.remote_addr}:{remote_port}"
+        prefix = f"[{remote}] "
+        request_body = f"""{request.method} {path} {request.environ['SERVER_PROTOCOL']}
+{request.headers}"""
+        data = request.get_data(as_text=True)[:100]
+        if data:
+            request_body += data
+        print(os.linesep.join([prefix + line for line in request_body.splitlines()]))
+        print()
+
+    @api.route('/.well-known/acme-challenge/<filename>', methods=['GET'])
+    def acme_challenge(filename):
+        # _show_request()
+        fn = os.path.join(webroot, ".well-known", 'acme-challenge', filename)
+        print(f"being challenged [{fn}]...")
+        with open(fn) as f:
+            return f.read(), 200
+
+    @api.route('/', defaults={'path': ''}, methods=ALL_METHODS)
+    @api.route('/<path:path>', methods=ALL_METHODS)
+    def _default(path):
+        _show_request()
+        return '', 200
+
+    print('Challenge http server started listening 80')
+
+    api.run(host='0.0.0.0', port=80)
+
+
+@letsencrypt.command(help='renew letsencrypt cert')
+@click.pass_context
+def renew(ctx, domains, email):
+    run_script('sudo certbot renew --force-renewal --no-random-sleep-on-renew', real_time=True)
+
+@letsencrypt.command(help='generate letsencrypt cert')
+@click.option('--domains', '-d', required=True, help='domain names')
+@click.option('--email', '-e', help='email')
+@click.pass_context
+def cert_only(ctx, domains, email):
+    assert not is_port_in_use(80), 'Port 80 is in use, please stop the process and try again'
+
+    webroot = from_cwd('__tmp__')
+    if not webroot.exists():
+        webroot.mkdir()
+        os.chmod(webroot, 0o777)
+
+    submit_thread(_run_challenge_server, webroot)
+
+    deploy_hook_script_file = NamedTemporaryFile(delete=False)
+    print("deploy_hook_script_file:", deploy_hook_script_file.name)
+    with open(deploy_hook_script_file.name, 'w') as f:
+        f.write("""#!/usr/bin/env bash
+# -*- coding: utf-8 -*-
+#
+# Description:
+
+_SCRIPT_NAME=$(basename $0)
+_SCRIPT_DIR=$(dirname $(realpath $(which $0)))
+
+log_info() {
+    echo "$(date +'%Y-%m-%dT%H:%M:%S.%3N%z') [$$] INFO ${_SCRIPT_NAME} $@" >> /tmp/corgi_letsencrypt.log
+}
+
+log_info "On cert renewal for [$RENEWED_DOMAINS]"
+
+log_info "Cleaning up tmp file ..."
+tmp_fullchain_pem_file=/tmp/fullchain.pem
+rm -rf $tmp_fullchain_pem_file || true
+
+log_info "Creating fullchain pem file ..."
+cat $RENEWED_LINEAGE/fullchain.pem > $tmp_fullchain_pem_file
+curl -s https://letsencrypt.org/certs/isrgrootx1.pem >> $tmp_fullchain_pem_file
+""" + f"""
+log_info "Copying key and cert to {webroot} ..."
+cp $RENEWED_LINEAGE/privkey.pem {webroot}/key.pem
+cp $tmp_fullchain_pem_file {webroot}/cert.pem
+""")
+    os.chmod(deploy_hook_script_file.name, 0o777)
+    deploy_hook_script_file.file.close()
+
+    command = f'sudo certbot certonly --non-interactive --agree-tos --no-eff-email --webroot -w {webroot} -d {domains}'
+
+    if email:
+        command += f' -m {email}'
+    else:
+        command += ' --register-unsafely-without-email'
+
+    command += f' --deploy-hook {deploy_hook_script_file.name}'
+    command += ' --force-renewal --expand'
+    print(command)
+    logger.info(command)
+    run_script(command, realtime=True, logger=logger)
+    while True:
+        if os.path.exists(webroot / 'cert.pem') and os.path.exists(webroot / 'key.pem'):
+            print("done")
+            break
+        time.sleep(1)
+    exit(0)
 
 def main():
     cli()

@@ -28,7 +28,7 @@ def _rabbit_url(uri):
     url = _forfun_url('/rabbit') + uri
     return ic(url)
 
-@click.group(help="for fun test")
+@click.group(help="for fun test", context_settings=dict(help_option_names=['-h', '--help']))
 def cli():
     pass
 

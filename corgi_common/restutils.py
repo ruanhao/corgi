@@ -3,14 +3,15 @@ from contextlib import redirect_stdout
 import sys
 from functools import partial
 from click import echo
-from corgi_common import json_print
+from qqutils import hprint
 
 def _check_response(r):
     if r.ok:
         return
     with redirect_stdout(sys.stderr):
         try:
-            json_print(r.json())
+            # json_print(r.json())
+            hprint(r.json())
         except Exception:
             echo(r.text)
         r.raise_for_status()
