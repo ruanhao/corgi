@@ -6,7 +6,7 @@ import socket
 import logging
 from icecream import ic
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix
 from tempfile import NamedTemporaryFile
 import os
 
@@ -468,6 +468,96 @@ cp $tmp_fullchain_pem_file {webroot}/cert.pem
             break
         time.sleep(1)
     exit(0)
+
+
+@cli.group(help='[command group] youtube downloader utils')
+def youtube():
+    """https://pytube.io/en/latest/index.html"""
+    pass
+
+@youtube.command(help='show youtube video caption')
+@click.option('--url', '-u', required=True, help='youtube video url')
+@click.option('--sock5-proxy-ip', help='sock5 proxy ip')
+@click.option('--sock5-proxy-port', help='sock5 proxy port')
+@click.pass_context
+def caption(ctx, url, sock5_proxy_ip, sock5_proxy_port):
+    from pytube import YouTube
+    proxies = None
+    if sock5_proxy_ip and sock5_proxy_port:
+        proxies = {
+            'http': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}",
+            'https': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
+        }
+
+    youtube = YouTube(url, proxies=proxies)
+    captions = youtube.captions
+    print(captions)
+
+
+@youtube.command(help='download youtube video')
+@click.option('--url', '-u', required=True, help='youtube video url')
+@click.option('--sock5-proxy-ip', help='sock5 proxy ip')
+@click.option('--sock5-proxy-port', help='sock5 proxy port')
+@click.option('--time-start', '-s', help="start time, can be expressed in seconds (15.35), in (min, sec), in (hour, min, sec), or as a string: '01:03:05.35'.")
+@click.option('--time-end', '-e')
+@click.pass_context
+def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
+    from pytube import YouTube
+    proxies = None
+    if sock5_proxy_ip and sock5_proxy_port:
+        # os.environ['ALL_PROXY'] = f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
+
+        # import socks
+        # import socket
+        # socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
+        # socket.socket = socks.socksocket
+        proxies = {
+            'http': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}",
+            'https': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
+        }
+    fps = 25
+
+    def _on_progress_callback(_chunk, _fh, bytes_remaining):
+        print(f"{bytes_remaining} bytes ({round(bytes_remaining / 1024 / 1024)} M) remaining ...")
+
+    def _on_complete_callback(_stream, file_path):
+        print(f"download completed: {file_path}")
+        nonlocal time_start, time_end, fps
+        if not time_start:
+            return
+        from moviepy.editor import VideoFileClip
+        video = VideoFileClip(file_path).subclip(time_start, time_end)
+        clip_path = add_suffix(file_path, '-clip')
+        video.write_videofile(clip_path, fps=fps)
+        print(f"done with clipping, fps: {fps}, file: {clip_path}")
+
+    youtube = YouTube(
+        url,
+        on_progress_callback=_on_progress_callback,
+        on_complete_callback=_on_complete_callback,
+        proxies=proxies,
+    )
+    streams = youtube.streams
+    # print(dir(streams[0]))
+    hprint(streams, mappings={
+        'itag': ('', lambda x: x.itag),
+        'mime_type': ('', lambda x: x.mime_type),
+        'fps': ('', lambda x: fps),
+        # 'progressive': ('', lambda x: x.progressive),
+        'type': ('', lambda x: x.type),
+        'resolution': ('', lambda x: x.resolution),
+        'filesize(MB)': ('', lambda x: x._filesize_mb),
+        'audio': ('', lambda x: "y" if x.includes_audio_track else ""),
+    })
+    highest_resolution_video = (streams.filter(file_extension='mp4')
+                                .order_by('resolution')
+                                .desc()
+                                .first())
+    fps = highest_resolution_video.fps
+    itag = prompt("Select itag", default=highest_resolution_video.itag)
+    print("Start downloading ...")
+    streams.get_by_itag(itag).download()
+
 
 def main():
     cli()

@@ -17,3 +17,5 @@ tqdm
 # psycopg2
 psycopg2-binary
 stopwatch.py
+pytube
+moviepy
