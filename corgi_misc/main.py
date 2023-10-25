@@ -6,7 +6,7 @@ import socket
 import logging
 from icecream import ic
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror
 from tempfile import NamedTemporaryFile
 import os
 
@@ -475,24 +475,67 @@ def youtube():
     """https://pytube.io/en/latest/index.html"""
     pass
 
+def _get_formatters():
+    from youtube_transcript_api.formatters import JSONFormatter
+    from youtube_transcript_api.formatters import TextFormatter
+    from youtube_transcript_api.formatters import WebVTTFormatter
+    from youtube_transcript_api.formatters import SRTFormatter
+
+    formatters = {
+        'json': JSONFormatter,
+        'text': TextFormatter,
+        'webvtt': WebVTTFormatter,
+        'srt': SRTFormatter,
+    }
+    return formatters
+
 @youtube.command(help='show youtube video caption')
 @click.option('--url', '-u', required=True, help='youtube video url')
 @click.option('--sock5-proxy-ip', help='sock5 proxy ip')
 @click.option('--sock5-proxy-port', help='sock5 proxy port')
+@click.option('--format', '-f', default='text', help='output format')
 @click.pass_context
-def caption(ctx, url, sock5_proxy_ip, sock5_proxy_port):
-    from pytube import YouTube
-    proxies = None
+def dump_caption(ctx, url, sock5_proxy_ip, sock5_proxy_port, format):
+    using_sock5_proxy = False
     if sock5_proxy_ip and sock5_proxy_port:
-        proxies = {
-            'http': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}",
-            'https': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
-        }
+        import socks
+        import socket
+        socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
+        socket.socket = socks.socksocket
+        using_sock5_proxy = True
 
-    youtube = YouTube(url, proxies=proxies)
-    captions = youtube.captions
-    print(captions)
+    proxy_handler = {}
+    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+    https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+    if http_proxy and not using_sock5_proxy:
+        proxy_handler['http'] = http_proxy
+    if https_proxy and not using_sock5_proxy:
+        proxy_handler['https'] = https_proxy
 
+    video_id = get_param(url, 'v')
+
+    from youtube_transcript_api import YouTubeTranscriptApi
+    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxy_handler or None)
+    transcript = transcript_list.find_transcript(['en'])
+    transcript = transcript.fetch()
+    formatter = _get_formatters()[format]()
+    formatted = formatter.format_transcript(transcript)
+    print(formatted)
+
+
+def _download_caption(url, filename, proxy_handler):
+    try:
+        video_id = get_param(url, 'v')
+        from youtube_transcript_api import YouTubeTranscriptApi
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxy_handler or None)
+        transcript = transcript_list.find_transcript(['en'])
+        transcript = transcript.fetch()
+        formatter = _get_formatters()['srt']()
+        formatted = formatter.format_transcript(transcript)
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(formatted)
+    except Exception as e:
+        perror(str(e))
 
 @youtube.command(help='download youtube video')
 @click.option('--url', '-u', required=True, help='youtube video url')
@@ -530,15 +573,18 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
             print()
 
     def _on_complete_callback(_stream, file_path):
+        nonlocal url
         print(f"download completed: {file_path}")
         nonlocal time_start, time_end, fps
         if not time_start:
+            _download_caption(url, modify_extension(file_path, 'srt'), proxy_handler)
             return
         from moviepy.editor import VideoFileClip
         video = VideoFileClip(file_path).subclip(time_start, time_end)
         clip_path = add_suffix(file_path, '-clip')
         video.write_videofile(clip_path, fps=fps)
         print(f"done with clipping, fps: {fps}, file: {clip_path}")
+        _download_caption(url, modify_extension(clip_path, 'srt'), proxy_handler)
 
     def __filesize_kb(stream):
         try:
@@ -553,7 +599,7 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
         url,
         on_progress_callback=_on_progress_callback,
         on_complete_callback=_on_complete_callback,
-        proxies=proxy_handler if proxy_handler else None,
+        proxies=proxy_handler or None,
     )
 
     streams = youtube.streams.filter(custom_filter_functions=[lambda s: s.includes_audio_track]).order_by('filesize_kb').desc()
