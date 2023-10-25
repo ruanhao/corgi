@@ -515,7 +515,11 @@ def dump_caption(ctx, url, sock5_proxy_ip, sock5_proxy_port, format):
     video_id = get_param(url, 'v')
 
     from youtube_transcript_api import YouTubeTranscriptApi
-    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxy_handler or None)
+    try:
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxy_handler or None)
+    except Exception as e:
+        perror(str(e))
+        return
     transcript = transcript_list.find_transcript(['en'])
     transcript = transcript.fetch()
     formatter = _get_formatters()[format]()
