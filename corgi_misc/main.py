@@ -6,7 +6,7 @@ import socket
 import logging
 from icecream import ic
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo
 from tempfile import NamedTemporaryFile
 import os
 
@@ -503,22 +503,31 @@ def caption(ctx, url, sock5_proxy_ip, sock5_proxy_port):
 @click.pass_context
 def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
     from pytube import YouTube
-    proxies = None
+    fps = 25
+    using_sock5_proxy = False
     if sock5_proxy_ip and sock5_proxy_port:
         # os.environ['ALL_PROXY'] = f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
+        import socks
+        import socket
+        socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
+        socket.socket = socks.socksocket
+        using_sock5_proxy = True
 
-        # import socks
-        # import socket
-        # socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
-        # socket.socket = socks.socksocket
-        proxies = {
-            'http': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}",
-            'https': f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
-        }
-    fps = 25
+    proxy_handler = {}
+    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+    https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+    if http_proxy and not using_sock5_proxy:
+        proxy_handler['http'] = http_proxy
+    if https_proxy and not using_sock5_proxy:
+        proxy_handler['https'] = https_proxy
 
     def _on_progress_callback(_chunk, _fh, bytes_remaining):
-        print(f"{bytes_remaining} bytes ({round(bytes_remaining / 1024 / 1024)} M) remaining ...")
+        total = _chunk.filesize
+        percent = round((1 - bytes_remaining / total) * 100, 2)
+        remaining = round(bytes_remaining / 1024 / 1024)
+        print(f"Progress [{percent:3.0f}%], remaining: {remaining:3.0f}M ...\r", end="")
+        if bytes_remaining == 0:
+            print()
 
     def _on_complete_callback(_stream, file_path):
         print(f"download completed: {file_path}")
@@ -531,13 +540,23 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
         video.write_videofile(clip_path, fps=fps)
         print(f"done with clipping, fps: {fps}, file: {clip_path}")
 
+    def __filesize_kb(stream):
+        try:
+            return int(stream.filesize_kb)
+        except Exception:
+            return stream._filesize_kb
+
+    if proxy_handler:
+        pinfo(f"Using proxy: {proxy_handler}")
+
     youtube = YouTube(
         url,
         on_progress_callback=_on_progress_callback,
         on_complete_callback=_on_complete_callback,
-        proxies=proxies,
+        proxies=proxy_handler if proxy_handler else None,
     )
-    streams = youtube.streams
+
+    streams = youtube.streams.filter(custom_filter_functions=[lambda s: s.includes_audio_track]).order_by('filesize_kb').desc()
     # print(dir(streams[0]))
     hprint(streams, mappings={
         'itag': ('', lambda x: x.itag),
@@ -546,16 +565,13 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
         # 'progressive': ('', lambda x: x.progressive),
         'type': ('', lambda x: x.type),
         'resolution': ('', lambda x: x.resolution),
-        'filesize(MB)': ('', lambda x: x._filesize_mb),
+        'filesize': ('', __filesize_kb),
         'audio': ('', lambda x: "y" if x.includes_audio_track else ""),
     })
-    highest_resolution_video = (streams.filter(file_extension='mp4')
-                                .order_by('resolution')
-                                .desc()
-                                .first())
+    highest_resolution_video = streams.order_by('resolution').desc().first()
     fps = highest_resolution_video.fps
     itag = prompt("Select itag", default=highest_resolution_video.itag)
-    print("Start downloading ...")
+    pinfo("Start downloading ...")
     streams.get_by_itag(itag).download()
 
 
