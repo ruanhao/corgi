@@ -20,3 +20,4 @@ stopwatch.py
 pytube
 moviepy
 youtube-transcript-api
+openai-whisper

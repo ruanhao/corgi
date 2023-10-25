@@ -547,10 +547,10 @@ def _download_caption(url, filename, proxy_handler):
 @click.option('--sock5-proxy-port', help='sock5 proxy port')
 @click.option('--time-start', '-s', help="start time, can be expressed in seconds (15.35), in (min, sec), in (hour, min, sec), or as a string: '01:03:05.35'.")
 @click.option('--time-end', '-e')
+@click.option("--with-audio", is_flag=True, help='create mp3 file at the same time')
 @click.pass_context
-def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
+def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end, with_audio):
     from pytube import YouTube
-    fps = 25
     using_sock5_proxy = False
     if sock5_proxy_ip and sock5_proxy_port:
         # os.environ['ALL_PROXY'] = f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
@@ -577,17 +577,21 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
             print()
 
     def _on_complete_callback(_stream, file_path):
-        nonlocal url
+        nonlocal url, with_audio
         print(f"download completed: {file_path}")
-        nonlocal time_start, time_end, fps
+        nonlocal time_start, time_end
+        from moviepy.editor import VideoFileClip
         if not time_start:
+            if with_audio:
+                video = VideoFileClip(file_path)
+                video.audio.write_audiofile(modify_extension(file_path, 'mp3'))
             _download_caption(url, modify_extension(file_path, 'srt'), proxy_handler)
             return
-        from moviepy.editor import VideoFileClip
-        video = VideoFileClip(file_path).subclip(time_start, time_end)
         clip_path = add_suffix(file_path, '-clip')
-        video.write_videofile(clip_path, fps=fps)
-        print(f"done with clipping, fps: {fps}, file: {clip_path}")
+        video = VideoFileClip(file_path).subclip(time_start, time_end)
+        video.write_videofile(clip_path)
+        if with_audio:
+            video.audio.write_audiofile(modify_extension(clip_path, 'mp3'))
         _download_caption(url, modify_extension(clip_path, 'srt'), proxy_handler)
 
     def __filesize_kb(stream):
@@ -606,12 +610,16 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
         proxies=proxy_handler or None,
     )
 
-    streams = youtube.streams.filter(custom_filter_functions=[lambda s: s.includes_audio_track]).order_by('filesize_kb').desc()
+    streams = youtube.streams.filter(file_extension='mp4',
+                                     custom_filter_functions=[
+                                         lambda s: s.mime_type.startswith('video'),
+                                         lambda s: s.includes_audio_track,
+                                     ]).order_by('filesize_kb').desc()
     # print(dir(streams[0]))
     hprint(streams, mappings={
         'itag': ('', lambda x: x.itag),
         'mime_type': ('', lambda x: x.mime_type),
-        'fps': ('', lambda x: fps),
+        'fps': ('', lambda x: x.fps),
         # 'progressive': ('', lambda x: x.progressive),
         'type': ('', lambda x: x.type),
         'resolution': ('', lambda x: x.resolution),
@@ -619,10 +627,22 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end):
         'audio': ('', lambda x: "y" if x.includes_audio_track else ""),
     })
     highest_resolution_video = streams.order_by('resolution').desc().first()
-    fps = highest_resolution_video.fps
     itag = prompt("Select itag", default=highest_resolution_video.itag)
     pinfo("Start downloading ...")
     streams.get_by_itag(itag).download()
+
+@cli.command(help='Dictation')
+@click.pass_context
+@click.argument('filename', type=click.Path(exists=True))
+@click.option("--model", "-m", type=click.Choice(['tiny', 'base', 'small']), default='base', show_default=True)
+def dictation(ctx, filename, model):
+    filename = click.format_filename(filename)
+    import whisper
+    model = whisper.load_model(model)
+    result = model.transcribe(filename)
+    with open(modify_extension(filename, 'txt'), 'wb') as f:
+        f.write(result['text'].encode('utf-8'))
+    print(result["text"])
 
 
 def main():
