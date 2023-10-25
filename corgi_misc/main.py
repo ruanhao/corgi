@@ -544,7 +544,7 @@ def _download_caption(url, filename, proxy_handler):
 @youtube.command(help='download youtube video')
 @click.option('--url', '-u', required=True, help='youtube video url')
 @click.option('--sock5-proxy-ip', help='sock5 proxy ip')
-@click.option('--sock5-proxy-port', help='sock5 proxy port')
+@click.option('--sock5-proxy-port', help='sock5 proxy port', type=int)
 @click.option('--time-start', '-s', help="start time, can be expressed in seconds (15.35), in (min, sec), in (hour, min, sec), or as a string: '01:03:05.35'.")
 @click.option('--time-end', '-e')
 @click.option("--with-audio", is_flag=True, help='create mp3 file at the same time')
