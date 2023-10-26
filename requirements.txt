@@ -21,3 +21,4 @@ pytube
 moviepy
 youtube-transcript-api
 openai-whisper
+PySocks

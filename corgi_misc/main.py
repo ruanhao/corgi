@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 import click
 import time
+import socks
 import socket
 import logging
 from icecream import ic
+from typing import Optional, Dict
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror, switch_dir
 from tempfile import NamedTemporaryFile
 import os
 
@@ -495,28 +497,14 @@ def _get_formatters():
 @click.option('--sock5-proxy-port', help='sock5 proxy port')
 @click.option('--format', '-f', default='text', help='output format')
 @click.pass_context
-def dump_caption(ctx, url, sock5_proxy_ip, sock5_proxy_port, format):
-    using_sock5_proxy = False
-    if sock5_proxy_ip and sock5_proxy_port:
-        import socks
-        import socket
-        socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
-        socket.socket = socks.socksocket
-        using_sock5_proxy = True
-
-    proxy_handler = {}
-    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
-    https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
-    if http_proxy and not using_sock5_proxy:
-        proxy_handler['http'] = http_proxy
-    if https_proxy and not using_sock5_proxy:
-        proxy_handler['https'] = https_proxy
-
+def caption(ctx, url, sock5_proxy_ip, sock5_proxy_port, format):
     video_id = get_param(url, 'v')
-
     from youtube_transcript_api import YouTubeTranscriptApi
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxy_handler or None)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(
+            video_id,
+            proxies=_proxy_handler(sock5_proxy_ip, sock5_proxy_port)
+        )
     except Exception as e:
         perror(str(e))
         return
@@ -541,6 +529,21 @@ def _download_caption(url, filename, proxy_handler):
     except Exception as e:
         perror(str(e))
 
+def _proxy_handler(sock5_proxy_ip: str, sock5_proxy_port: int) -> Optional[Dict[str, str]]:
+    if sock5_proxy_ip and sock5_proxy_port:
+        # os.environ['ALL_PROXY'] = f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
+        socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
+        socket.socket = socks.socksocket
+        return
+    proxy_handler = {}
+    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
+    https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+    if http_proxy:
+        proxy_handler['http'] = http_proxy
+    if https_proxy:
+        proxy_handler['https'] = https_proxy
+    return proxy_handler or None
+
 @youtube.command(help='download youtube video')
 @click.option('--url', '-u', required=True, help='youtube video url')
 @click.option('--sock5-proxy-ip', help='sock5 proxy ip')
@@ -548,25 +551,12 @@ def _download_caption(url, filename, proxy_handler):
 @click.option('--time-start', '-s', help="start time, can be expressed in seconds (15.35), in (min, sec), in (hour, min, sec), or as a string: '01:03:05.35'.")
 @click.option('--time-end', '-e')
 @click.option("--with-audio", is_flag=True, help='create mp3 file at the same time')
+@click.option("--dest-dir", '-d', default='', help='destination directory')
 @click.pass_context
-def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end, with_audio):
+def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end, with_audio, dest_dir):
     from pytube import YouTube
-    using_sock5_proxy = False
-    if sock5_proxy_ip and sock5_proxy_port:
-        # os.environ['ALL_PROXY'] = f"socks5://{sock5_proxy_ip}:{sock5_proxy_port}"
-        import socks
-        import socket
-        socks.set_default_proxy(socks.PROXY_TYPE_SOCKS5, sock5_proxy_ip, sock5_proxy_port)
-        socket.socket = socks.socksocket
-        using_sock5_proxy = True
 
-    proxy_handler = {}
-    http_proxy = os.getenv('HTTP_PROXY') or os.getenv('http_proxy')
-    https_proxy = os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
-    if http_proxy and not using_sock5_proxy:
-        proxy_handler['http'] = http_proxy
-    if https_proxy and not using_sock5_proxy:
-        proxy_handler['https'] = https_proxy
+    proxy_handler = _proxy_handler(sock5_proxy_ip, sock5_proxy_port)
 
     def _on_progress_callback(_chunk, _fh, bytes_remaining):
         total = _chunk.filesize
@@ -577,7 +567,6 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end, w
             print()
 
     def _on_complete_callback(_stream, file_path):
-        nonlocal url, with_audio
         print(f"download completed: {file_path}")
         nonlocal time_start, time_end
         from moviepy.editor import VideoFileClip
@@ -629,7 +618,8 @@ def download(ctx, url, sock5_proxy_ip, sock5_proxy_port, time_start, time_end, w
     highest_resolution_video = streams.order_by('resolution').desc().first()
     itag = prompt("Select itag", default=highest_resolution_video.itag)
     pinfo("Start downloading ...")
-    streams.get_by_itag(itag).download()
+    with switch_dir(from_cwd('__youtube__', dest_dir)):
+        streams.get_by_itag(itag).download()
 
 @cli.command(help='Dictation')
 @click.pass_context
