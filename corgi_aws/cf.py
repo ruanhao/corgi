@@ -140,7 +140,7 @@ def ls_stacks(all):
 @click.option("--instance-num", "-n", "instance_num", help="Number of EC2 instance", default=1, type=int, show_default=True)
 @click.option('--instance-type', default='c5d.xlarge', show_default=True)
 @click.option('--volume-size', type=int, default=80, help='Boot Ebs volume size (GB)', show_default=True)
-@click.option('--keyname', required=True, envvar="AWS_KEYPAIR", help='Key name to ssh with')
+@click.option('--keyname', required=True, envvar="AWS_KEYPAIR", help='Key name to ssh with (env: AWS_KEYPAIR)', show_default=True)
 @click.option('--add-volume', is_flag=True, help='Add additional volume', show_default=True)
 @click.option('--add-ephemeral', is_flag=True, help='Add instance store', hidden=True)  # seems instance store is decided by instance type
 @click.option('--dry', is_flag=True)

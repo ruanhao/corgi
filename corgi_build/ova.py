@@ -50,6 +50,7 @@ def _prepare_preseed_cfg(username, password, swapsize, os_code):
         with open(os.path.join(dir_path, 'user-data.template'), 'r') as f0:
             with open(os.path.join('http', 'user-data'), 'w') as f:
                 f.write(Template(f0.read()).substitute({
+                    'SWAP_SIZE': swapsize,
                     'username': username,
                     'password': "$6$rounds=4096$qTkeu80w$rVbH7vdAfjnTEt9DkudHJJ1glfeNSP4Q.nLTHoeY5CfH6NuUYwEmJtsgBjNBFEAxw7L8rGTQ6ilDPRbOqFnFq/"
                 }))
@@ -58,7 +59,8 @@ def _prepare_preseed_cfg(username, password, swapsize, os_code):
 def _prepare_ovf(name, os_code, memory, cpu, disk, version):
     logger.info("Creating ovf file ...")
     rendered = ''
-    with open(os.path.join(dir_path, 'ubuntu.ovf.template'), 'r') as f:
+    template_name = 'ubuntu.ovf.template' if os_code == 'focal' else f'ubuntu-{os_code}.ovf.template'
+    with open(os.path.join(dir_path, template_name), 'r') as f:
         tplt = Template(f.read())
         rendered = tplt.substitute({
             'cpu': cpu,
@@ -74,8 +76,8 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
 
 @click.command(help="Build Ubuntu")
 @click.option('--cpu', '-c', default=4, help="CPU count", show_default=True)
-@click.option('--memory', '-m', default=1024, type=int, help="Memory (MB)", show_default=True)
-@click.option('--disk', '-d', default=80, type=int, help="Disk size (GB)", show_default=True)
+@click.option('--memory', '-m', default=16384, type=int, help="Memory (MB)", show_default=True)
+@click.option('--disk', '-d', default=32, type=int, help="Disk size (GB)", show_default=True)
 @click.option('--swap', type=int, help="Swap size (MB)")
 @click.option('--os', "os_code", default='jammy', type=click.Choice(['focal', 'jammy']), help="OS code", show_default=True)
 @click.option('--name', help="OVA filename")
@@ -86,6 +88,11 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
 @click.option('--dry', is_flag=True, help="Show script without running")
 @click.option('--no-swap', is_flag=True, help="Disable swap")
 def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, dry, no_swap, redis_version):
+    """
+    https://github.com/alvistack/vagrant-ubuntu/blob/master/packer/ubuntu-22.04-virtualbox/packer.json
+
+    pass on ubuntu, vboxmanage: 5.1.38_Ubuntur122592
+    """
     if not swap:
         swap = int(memory / 2)
     if not name:
@@ -109,7 +116,8 @@ def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, 
         # run_script(f'packer build -timestamp-ui -force {os_code}.json', realtime=True)
         script = f'''
 mkdir -p /tmp/packer_cache
-PACKER_CACHE_DIR=/tmp/packer_cache packer build -timestamp-ui -force {os_code}.json && echo "Build Sucess !"
+PACKER_CACHE_DIR=/tmp/packer_cache packer build -var disk_size={disk} -timestamp-ui -force {os_code}.json && echo "Build Sucess !"
+# PACKER_CACHE_DIR=/tmp/packer_cache packer build -timestamp-ui -force {os_code}.json && echo "Build Sucess !"
 # Do compression
 rm -rf output/*.vdi
 if which VBoxManage; then

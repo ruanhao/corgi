@@ -311,6 +311,7 @@ def ls_cbd_images(release):
             }])['Images']
     # from pprint import pprint
     # pprint(images)
+    images.sort(key=lambda i: i['CreationDate'], reverse=False)
     snapshots = []
     releases = []
     for image in images:
@@ -340,8 +341,10 @@ def filter():
                 'Name': 'root-device-type',
                 'Values': ['ebs']
             }
-        ])['Images']
+        ]
+    )['Images']
     snapshots = []
+    images.sort(key=lambda x: x['CreationDate'], reverse=False)
     for image in images:
         snapshots.append([image['CreationDate'], image['ImageId'], image['Name']])
     print(tabulate(snapshots, headers=['CreateDate', 'Image', 'Name']))

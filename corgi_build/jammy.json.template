@@ -36,9 +36,9 @@
       "format": "ovf",
       "guest_os_type": "Ubuntu_64",
       "headless": "{{user `headless`}}",
-      "http_directory": "http",
+      "http_directory": "./http",
       "iso_checksum": "{{user `iso_checksum_type`}}:{{user `iso_checksum`}}",
-      "iso_url": "{{user `mirror`}}/22.04/ubuntu-22.04.2-live-server-amd64.iso",
+      "iso_url": "{{user `mirror`}}/22.04/ubuntu-22.04.3-live-server-amd64.iso",
       "output_directory": "{{user `output_dir`}}",
       "shutdown_command": "sudo bash -c \"rm -f /etc/sudoers.d/${username}; systemctl poweroff;\"",
       "ssh_password": "$password",
@@ -47,20 +47,11 @@
       "ssh_read_write_timeout": "600s",
       "ssh_username": "$username",
       "type": "virtualbox-iso",
-      "vboxmanage": [
-        [
-          "modifyvm",
-          "{{.Name}}",
-          "--memory",
-          "{{user `memory`}}"
-        ],
-        [
-          "modifyvm",
-          "{{.Name}}",
-          "--cpus",
-          "{{user `cpus`}}"
-        ]
-      ],
+      "cpus": 2,
+      "memory": 4096,
+      "vrdp_bind_address": "0.0.0.0",
+      "vrdp_port_max": 6000,
+      "vrdp_port_min": 5900,
       "vm_name": "{{user `image_name`}}-{{user `vm_version`}}"
     }
   ],
@@ -83,13 +74,13 @@
   "variables": {
     "cpus": "$cpu",
     "dcloud": "$disk",
-    "disk_size": "5000",
+    "disk_size": "16384",
     "headless": "true",
-    "iso_checksum": "5e38b55d57d94ff029719342357325ed3bda38fa80054f9330dc789cd2d43931",
+    "iso_checksum": "a4acfda10b18da50e2ec50ccaf860d7f20b389df8765611142305c0e911d16fd",
     "iso_checksum_type": "sha256",
     "memory": "$memory",
     "mirror": "https://releases.ubuntu.com",
-    "ssh_timeout": "20m",
+    "ssh_timeout": "120m",
     "image_name": "${image_name}-${os_code}",
     "vm_version": "$version",
     "output_dir": "output"

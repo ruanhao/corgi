@@ -30,7 +30,7 @@ def __get_policies():
     return json.loads(t)
 
 
-@click.group(help="CLI tool for AWS management")
+@click.group(help="CLI tool for AWS management", context_settings=dict(help_option_names=['-h', '--help']))
 def cli():
     check_aws_credential()
     pass
