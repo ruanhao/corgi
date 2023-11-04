@@ -2,6 +2,7 @@ import click
 import logging
 import os
 import shutil
+import json
 from string import Template
 from corgi_common.jinja2utils import get_rendered
 from corgi_common import run_script, switch_cwd
@@ -20,8 +21,9 @@ def info(msg):
     click.echo(msg)
 
 
-@click.group(help="Utils for building OVA")
-def ova():
+@click.group(help="Utils for building OVA", context_settings=dict(help_option_names=['-h', '--help']))
+@click.pass_context
+def ova(ctx):
     pass
 
 
@@ -73,6 +75,10 @@ def _prepare_ovf(name, os_code, memory, cpu, disk, version):
     with open('ubuntu.ovf', 'w') as f:
         f.write(rendered)
 
+def _support_nat_localhostreachable():
+    _, _, stderr = run_script('vboxmanage modifyvm --help', capture=True)
+    return 'nat-localhostreachableN' in stderr
+
 
 @click.command(help="Build Ubuntu")
 @click.option('--cpu', '-c', default=4, help="CPU count", show_default=True)
@@ -92,6 +98,7 @@ def ubuntu(cpu, memory, disk, swap, os_code, name, version, username, password, 
     https://github.com/alvistack/vagrant-ubuntu/blob/master/packer/ubuntu-22.04-virtualbox/packer.json
 
     pass on ubuntu, vboxmanage: 5.1.38_Ubuntur122592
+    > corgi_build ova ubuntu -c 8 -d 64 --swap 4096 --version=22.04.3.20231104.64g
     """
     if not swap:
         swap = int(memory / 2)
@@ -155,6 +162,22 @@ def _prepare_customize_script(**values):
     with open('customize.sh', 'w') as f:
         f.write(script)
 
+
+def _vbox_commands():
+    vbox_commands = []
+    if _support_nat_localhostreachable():
+        vbox_commands += [
+            "modifyvm",
+            "{{.Name}}",
+            "--nat-localhostreachable1",
+            "on"
+        ]
+    if vbox_commands:
+        return json.dumps(vbox_commands)
+    else:
+        return ''
+
+
 def _prepare_packer_json(os_code, username, password, name, version, cpu, disk, memory):
     logger.info("Creating packer json file ...")
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -171,10 +194,10 @@ def _prepare_packer_json(os_code, username, password, name, version, cpu, disk, 
             'disk': disk,
             'memory': memory,
             'os_code': os_code,
+            'vbox_commands': _vbox_commands()
         })
     with open(f"{os_code}.json", 'w') as f:
         f.write(rendered)
-    pass
 
 
 def _prepare_staging_dir(name, os_code, username, password):
