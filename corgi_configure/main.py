@@ -8,6 +8,8 @@ import tempfile
 import logging
 from . import k8s
 
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 config_logging('corgi_configure', logging.DEBUG)
 
 def _register_commands(module):
@@ -20,8 +22,9 @@ def _register_commands(module):
 def run_as_root(*args, **kwargs):
     run_script(*args, **kwargs)
 
-@click.group(help="Handy scripts")
-def cli():
+@click.group(help="Handy scripts", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def cli(ctx):
     pass
 
 @cli.command()
@@ -42,6 +45,30 @@ sudo systemctl restart tftpd-hpa.service
 """
     run_script_as_root_live(script, dry=dry)
     pass
+
+@cli.command(short_help="Enable/Disable offload by ethtool")
+@click.option('--dry', is_flag=True)
+@click.option('--on', is_flag=True, help='Enable offload')
+@click.option('--off', is_flag=True, help='Disable offload')
+@click.option('--device', '-d', default='eth0', help='Device name')
+@click.option('--dump', is_flag=True, help='Dump offload status')
+def offload(dry, on, off, device, dump):
+    """
+https://www.linuxquestions.org/questions/linux-networking-3/help-needed-disabling-tcp-udp-checksum-offloading-in-debian-880233/
+https://michael.mulqueen.me.uk/2018/08/disable-offloading-netplan-ubuntu/
+    """
+    if on and off:
+        bye("Cannot enable and disable at the same time")
+    if not on and not off:
+        bye("Should specify either on or off")
+    switch = "on" if on else "off"
+    script = f"""which ethtool || sudo apt install ethtool -y
+sudo ethtool --offload {device} rx {switch} tx {switch}
+sudo ethtool -K {device} gso {switch} gro {switch}"""
+    if dump:
+        script += f"sudo ethtool --show-offload {device}"
+    run_script_as_root_live(script, dry=dry)
+
 
 @cli.command()
 @click.option('--device', '-d', required=True, help='Specify block device')
