@@ -18,7 +18,9 @@ from troposphere.ec2 import (
     VolumeAttachment,
     NetworkInterfaceProperty,
     BlockDeviceMapping,
-    EBSBlockDevice
+    EBSBlockDevice,
+    EIP,
+    EIPAssociation,
 )
 from .common import (
     default_vpc_id,
@@ -144,6 +146,7 @@ def ls_stacks(all):
 @click.option('--add-volume', is_flag=True, help='Add additional volume', show_default=True)
 @click.option('--add-ephemeral', is_flag=True, help='Add instance store', hidden=True)  # seems instance store is decided by instance type
 @click.option('--dry', is_flag=True)
+@click.option('--with-eip', is_flag=True, help='Associate EIP to the instance', show_default=True)
 @click.option('--debug', is_flag=True)
 @click.option('--efs', is_flag=True)
 @click.option('--ingress-ports')
@@ -160,6 +163,7 @@ def launch_instances(
         dry,
         json_format,
         add_volume,
+        with_eip,
         add_ephemeral,
         ingress_ports
 ):
@@ -370,12 +374,35 @@ def launch_instances(
             ),
         ] for i in range(instance_num)
     ])
+
+    eips = [
+        EIP(
+            f"EIP{i}",
+            Domain="vpc",
+        )
+        for i in range(instance_num)
+    ]
+
+    eip_associations = [
+        EIPAssociation(
+            f"EIPAssociation{i}",
+            AllocationId=GetAtt(f'EIP{i}', 'AllocationId'),
+            InstanceId=Ref(f'Instance{i}'),
+        )
+        for i in range(instance_num)
+    ]
+
     outputs = flatten([
         [
             Output(
                 f"InstanceId{idx}",
                 Description=f"InstanceId of the newly created EC2 instance ({idx})",
                 Value=Ref(f'Instance{idx}'),
+            ),
+            Output(
+                f"EIP{idx}",
+                Description=f"EIP of the newly created EC2 instance ({idx})",
+                Value=GetAtt(f'EIP{idx}', 'PublicIp'),
             ),
             Output(
                 f"PublicIP{idx}",
@@ -392,7 +419,7 @@ def launch_instances(
     t = cf_template(
         parameters=parameters,
         outputs=outputs,
-        resources=[security_group, *instances, *efs_resources],
+        resources=[security_group, *instances, *efs_resources, *eips, *eip_associations],
         conditions=conditions
     )
     if dry:
