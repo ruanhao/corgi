@@ -212,4 +212,22 @@ echo
         click.echo(f'Done. Please check by running: KUBECONFIG={tmp_dir}/{user}.conf kubectl get all')
 
 
+@cli.command(short_help="Create a Swap File on Linux with dd Command")
+@click.option('--size', '-s', 'size_k', default=1024, type=int, help='Size of swap file in MB')
+@click.option('--swapfile', default='/swapfile', help='Swap file path')
+@click.pass_context
+def swapfile(ctx, size_k, swapfile):
+    count = size_k * 1024
+    script = f'''
+if [ -f {swapfile} ]; then
+    echo "Swap file already exists: {swapfile}"
+    exit 1
+fi
+sudo dd if=/dev/zero of={swapfile} bs=1024 count={count}
+sudo mkswap {swapfile} && sudo chmod 0600 {swapfile}
+sudo swapon {swapfile}
+echo "{swapfile} none swap sw 0 0" | sudo tee -a /etc/fstab'''
+    click.echo(script)
+
+
 _register_commands(k8s)

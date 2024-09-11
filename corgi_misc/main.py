@@ -8,7 +8,7 @@ import logging
 from icecream import ic
 from typing import Optional, Dict
 import codecs
-from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror, switch_dir
+from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror, switch_dir, red, green, time_measurer
 from tempfile import NamedTemporaryFile
 import os
 
@@ -151,6 +151,33 @@ def gen_self_sign_cert(days, cn, organization, san):
     print(f'cert: {cert_filename}')
     pass
 
+# pip install pylint
+# pyreverse -f ALL -ASmy -d __output__ -o html -c langchain_community.chat_models.ollama.ChatOllama langchain_community
+@cli.command(help='Show UML by pyreverse')
+@click.pass_context
+@click.option('--output', '-o', type=click.Path(exists=False), default='__uml__', show_default=True)
+@click.option('--format', '-f', default='html', show_default=True)
+@click.argument('dir_or_file_path', required=True)
+def pyreverse(ctx, output, format, dir_or_file_path):
+    """
+    corgi_misc pyreverse ~/myenv/lib/python3.10/site-packages/langchain_core/prompts/
+    corgi_misc pyreverse ~/myenv/lib/python3.10/site-packages/langchain_core/prompts/chat.py
+    """
+    from pathlib import Path
+    output_path = Path(output)
+    if not output_path.exists():
+        output_path.mkdir(parents=True)
+    output_absolute_path = output_path.absolute().as_posix()
+    script = f'pyreverse -f ALL -ASmy -d {output_absolute_path} -o {format} {dir_or_file_path}'
+    print(script)
+    with time_measurer("Generating UML..."):
+        rc, stdout, stderr = run_script(script, capture=True)
+    if stdout:
+        print(stdout)
+    if rc:
+        print(red(stderr))
+    else:
+        print(green(f'UML generated at {output_absolute_path}/classes.{format}'))
 
 @cli.command(help='Monitor conntrack SNAT events')
 def conntrack_monitor_snat():
@@ -403,8 +430,18 @@ def _run_challenge_server(webroot):
 
 @letsencrypt.command(help='renew letsencrypt cert')
 @click.pass_context
-def renew(ctx, domains, email):
-    run_script('sudo certbot renew --force-renewal --no-random-sleep-on-renew', real_time=True)
+def renew(ctx):
+    assert not is_port_in_use(80), 'Port 80 is in use, please stop the process and try again'
+
+    webroot = from_cwd('__tmp__')
+    if not webroot.exists():
+        webroot.mkdir()
+        os.chmod(webroot, 0o777)
+
+    submit_thread(_run_challenge_server, webroot)
+    time.sleep(3)
+    # run_script('sudo certbot renew --force-renewal --no-random-sleep-on-renew', realtime=True)
+    run_script('sudo certbot renew --force-renewal', realtime=True)
 
 @letsencrypt.command(help='generate letsencrypt cert')
 @click.option('--domains', '-d', required=True, help='domain names')

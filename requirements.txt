@@ -5,7 +5,7 @@ troposphere
 jinja2
 awacs
 redis==4.3.1
-pymongo==3.12.0
+pymongo
 pika
 psutil
 flask

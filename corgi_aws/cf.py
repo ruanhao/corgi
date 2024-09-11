@@ -392,6 +392,10 @@ def launch_instances(
         for i in range(instance_num)
     ]
 
+    if not with_eip:
+        eips = []
+        eip_associations = []
+
     outputs = flatten([
         [
             Output(
@@ -403,7 +407,7 @@ def launch_instances(
                 f"EIP{idx}",
                 Description=f"EIP of the newly created EC2 instance ({idx})",
                 Value=GetAtt(f'EIP{idx}', 'PublicIp'),
-            ),
+            ) if with_eip else None,
             Output(
                 f"PublicIP{idx}",
                 Description=f"Public IP address of the newly created EC2 instance ({idx})",
@@ -415,6 +419,8 @@ def launch_instances(
                 Value=GetAtt(f'Instance{idx}', "PrivateIp"),
             )
         ] for idx in range(instance_num)])
+
+    outputs = [o for o in outputs if o is not None]
 
     t = cf_template(
         parameters=parameters,
