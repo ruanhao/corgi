@@ -7,12 +7,12 @@
     fi
     if which apt 2>/dev/null; then
         apt update -y
-        apt install netcat python3-pip -y
+        apt install netcat-traditional python3-pip -y
 {% if efs %}
         apt install nfs-common -y
 {% endif %}
     fi
-    pip3 install  https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+    pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
 {% if efs %}
     # wait until EFS file system is available
     for _ in {1..60}; do # 10 minutes at most
@@ -41,4 +41,6 @@ true
 {% endif %}
 RETVAL=$?
 cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region} && exit
-/opt/aws/bin/cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region}
+/opt/aws/bin/cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region} && exit
+/usr/local/bin/cfn-signal -e $RETVAL --stack ${AWS::StackName} --resource {{ instance_id }} --region ${AWS::Region}
+# cat /var/log/cloud-init-output.log for debugging

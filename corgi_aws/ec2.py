@@ -331,7 +331,7 @@ def filter():
         Filters=[
             {
                 'Name': 'name',
-                'Values': ['ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*']
+                'Values': ['ubuntu/images/*ubuntu-*-24.04-amd64-server-*']
             },
             {
                 'Name': 'virtualization-type',
