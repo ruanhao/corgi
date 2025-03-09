@@ -1,6 +1,5 @@
 # Define common variables
 KUBERNETES_VERSION={{ kubernetes_version }}
-APT_KUBERNETES_VERSION=${KUBERNETES_VERSION}-00
 
 # Install common packages
 export DEBIAN_FRONTEND=noninteractive
@@ -8,21 +7,20 @@ apt-get update -y
 # apt-get dist-upgrade -y
 apt-get install apt-transport-https ca-certificates curl software-properties-common -y
 
-# Adding apt repo
-{%- if using_docker %}
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-{%- endif %}
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
 # Add kubernetes sources list into the sources.list directory
-cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+# If the folder `/etc/apt/keyrings` does not exist, it should be created before the curl command, read the note below.
+# sudo mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBERNETES_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg # allow unprivileged APT programs to read this keyring
+# This overwrites any existing configuration in /etc/apt/sources.list.d/kubernetes.list
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBERNETES_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+chmod 644 /etc/apt/sources.list.d/kubernetes.list   # helps tools such as command-not-found to work correctly
 apt-get update -y
 
 {%- if using_docker %}
 # Install docker container engine
-apt-get install docker-ce -y
+apt-get install docker.io -y
 
 # Enable docker service
 cat <<EOF >/etc/docker/daemon.json
@@ -117,7 +115,7 @@ sed -i '/swap/d' /etc/fstab
 swapoff -a
 
 # Install Kubernetes kubeadm, kubelet and kubectl
-apt-get install -y kubelet=$APT_KUBERNETES_VERSION kubeadm=$APT_KUBERNETES_VERSION kubectl=$APT_KUBERNETES_VERSION
+apt-get install -y kubelet kubeadm kubectl
 
 # Start and Enable kubelet service
 systemctl enable kubelet

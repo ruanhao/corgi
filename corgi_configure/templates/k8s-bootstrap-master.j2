@@ -1,5 +1,7 @@
 {% include 'k8s-bootstrap-common.j2' %}
 
+hostnamectl hostname {{ hostname }}
+
 # Define variables for master node
 POD_NETWORK={{ pod_network or '192.168.0.0/16' }}
 METRICS_SERVER_VERSION={{ metrics_server_version or '0.6.1' }}
@@ -9,8 +11,7 @@ CNI_PLUGIN={{ cni_plugin | default('flannel') }}
 CROSS_SUBNET=$cross_subnet
 
 # Initialize Kubernetes Cluster
-kubeadm init --kubernetes-version=v${KUBERNETES_VERSION} \
-        --apiserver-advertise-address=0.0.0.0 \
+kubeadm init --apiserver-advertise-address=0.0.0.0 \
         --pod-network-cidr=$POD_NETWORK \
         --token-ttl 0 \
     | tee /tmp/kubeinit.log

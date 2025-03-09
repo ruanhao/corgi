@@ -8,6 +8,7 @@ import logging
 from icecream import ic
 from typing import Optional, Dict
 import codecs
+from datetime import datetime, timedelta
 from qqutils import run_proxy, as_root, run_script, YmdHMS, configure_logging, from_cwd, is_port_in_use, submit_thread, hprint, prompt, add_suffix, pinfo, get_param, modify_extension, perror, switch_dir, red, green, time_measurer
 from tempfile import NamedTemporaryFile
 import os
@@ -150,6 +151,89 @@ def gen_self_sign_cert(days, cn, organization, san):
     print(f'key: {key_filename}')
     print(f'cert: {cert_filename}')
     pass
+
+@openssl.command()
+@click.option('--csr', '-csr', type=click.Path(exists=True), required=False)
+@click.option('--key', '-k', type=click.Path(exists=True), required=False)
+@click.option('--days', '-d', default=3650, type=int, show_default=True)
+@click.option('--common-name', '-cn', 'cn', default='test.com', show_default=True)
+@click.option('--organization', '-o', default='CRDC', show_default=True)
+@click.option('--san', '-san', required=False, help='subjectAltName ext')
+@click.pass_context
+def sign_csr(ctx, csr, key, days, cn, organization, san):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    if not key:
+        # 生成 RSA 私钥
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+
+        # 保存私钥
+        pem_private_key = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+
+        with open("private_key.pem", "wb") as f:
+            f.write(pem_private_key)
+    else:
+        with open(key, 'rb') as f:
+            pem_private_key = f.read()
+            private_key = serialization.load_pem_private_key(pem_private_key, password=None)
+
+    if not csr:
+        # 生成 CSR
+        builder = x509.CertificateSigningRequestBuilder().subject_name(
+            x509.Name([
+                x509.NameAttribute(NameOID.COUNTRY_NAME, u"CN"),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Shanghai"),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, u"Shanghai"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization),
+                x509.NameAttribute(NameOID.COMMON_NAME, cn),
+            ])
+        )
+        if san:
+            builder.add_extension(
+                x509.SubjectAlternativeName([
+                    x509.DNSName(san)
+                ]),
+                critical=False,
+            )
+
+        csr = builder.sign(private_key, hashes.SHA256())
+        # 保存 CSR
+        pem_csr = csr.public_bytes(serialization.Encoding.PEM)
+        with open("csr.pem", "wb") as f:
+            f.write(pem_csr)
+    else:
+        with open(csr, 'rb') as f:
+            pem_csr = f.read()
+            csr = x509.load_pem_x509_csr(pem_csr)
+
+    # 生成证书
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(csr.subject)
+        .issuer_name(csr.subject)  # 自签名证书，所以颁发者是自己
+        .public_key(csr.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.utcnow())
+        .not_valid_after(datetime.utcnow() + timedelta(days=days))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .sign(private_key, hashes.SHA256())
+    )
+
+    # 保存证书
+    with open("certificate.pem", "wb") as f:
+        f.write(certificate.public_bytes(serialization.Encoding.PEM))
+
 
 # pip install pylint
 # pyreverse -f ALL -ASmy -d __output__ -o html -c langchain_community.chat_models.ollama.ChatOllama langchain_community

@@ -6,6 +6,8 @@ from string import Template
 import tempfile
 from jinja2 import FileSystemLoader, Environment
 
+DEFAULT_K8S_VERSION = '1.32'
+
 @as_root
 def _run_as_root(*args, **kwargs):
     run_script(*args, **kwargs)
@@ -31,10 +33,11 @@ def _run(script, dry=False):
     _run_as_root(script, realtime=True, opts='e')
 
 @click.command(short_help="Bootstrap master node")
-@click.option("--kubernetes-version", default='1.23.6', show_default=True)
+@click.option("--kubernetes-version", default=DEFAULT_K8S_VERSION, show_default=True)
 @click.option("--pod-network", default='192.168.0.0/16', show_default=True)
 @click.option("--helm-version", default='3.8.2', show_default=True)
 @click.option("--metrics-server-version", default='0.6.1', show_default=True)
+@click.option("--hostname", "hostname", default='master', help='Master node hostname', show_default=True)
 @click.option(
     '--cni-plugin',
     default='flannel',
@@ -50,8 +53,9 @@ def k8s_bootstrap_master_node(dry, **values):
 
 
 @click.command(short_help="Bootstrap worker node")
-@click.option("--kubernetes-version", default='1.23.6', show_default=True)
+@click.option("--kubernetes-version", default=DEFAULT_K8S_VERSION, show_default=True)
 @click.option("--ip", "master_ip", required=True, help='Master node global IP address')
+@click.option("--hostname", "hostname", required=True, help='Worker node hostname')
 @click.option('--using-docker', is_flag=True, help="using docker as container runtime, otherwise using containerd")
 @click.option("--dry", is_flag=True)
 def k8s_bootstrap_worker_node(dry, **values):

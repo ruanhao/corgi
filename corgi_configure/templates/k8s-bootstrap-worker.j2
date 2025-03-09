@@ -1,5 +1,7 @@
 {% include 'k8s-bootstrap-common.j2' %}
 
+hostnamectl hostname {{ hostname }}
+
 cat >>/etc/hosts<<EOF
 {{ master_ip }}  master
 EOF
