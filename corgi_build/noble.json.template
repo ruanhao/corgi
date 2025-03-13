@@ -1,0 +1,91 @@
+{
+  "builders": [
+    {
+      "boot_command": [
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "<tab><tab><tab><tab><tab><tab><tab><tab><tab><tab><wait>",
+        "c<wait5>",
+        "set gfxpayload=keep<enter><wait5>",
+        "linux /casper/vmlinuz <wait5>",
+        "autoinstall quiet fsck.mode=skip <wait5>",
+        "net.ifnames=0 biosdevname=0 systemd.unified_cgroup_hierarchy=0 <wait5>",
+        "ds=\"nocloud-net;s=http://{{.HTTPIP}}:{{.HTTPPort}}/\" <wait5>",
+        "---<enter><wait5>",
+        "initrd /casper/initrd<enter><wait5>",
+        "boot<enter>"
+      ],
+      "boot_wait": "1s",
+      "disk_size": "{{user `disk_size`}}",
+      "export_opts": [
+        "--manifest",
+        "--vsys",
+        "0",
+        "--description",
+        "{{user `vm_description`}}",
+        "--version",
+        "{{user `vm_version`}}"
+      ],
+      "vboxmanage": [
+         $vbox_commands
+      ],
+      "format": "ovf",
+      "guest_os_type": "Ubuntu_64",
+      "headless": "{{user `headless`}}",
+      "http_directory": "./http",
+      "iso_checksum": "{{user `iso_checksum_type`}}:{{user `iso_checksum`}}",
+      "iso_url": "{{user `mirror`}}/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+      "output_directory": "{{user `output_dir`}}",
+      "shutdown_command": "sudo bash -c \"rm -f /etc/sudoers.d/${username}; systemctl poweroff;\"",
+      "ssh_password": "$password",
+      "ssh_timeout": "{{user `ssh_timeout`}}",
+      "ssh_port": 22,
+      "ssh_read_write_timeout": "600s",
+      "ssh_username": "$username",
+      "type": "virtualbox-iso",
+      "cpus": 2,
+      "memory": 4096,
+      "vrdp_bind_address": "0.0.0.0",
+      "vrdp_port_max": 6000,
+      "vrdp_port_min": 5900,
+      "vm_name": "{{user `image_name`}}-{{user `vm_version`}}"
+    }
+  ],
+
+  "provisioners": [
+    {
+      "inline": [
+        "sleep 10"
+      ],
+      "type": "shell"
+    },
+    {
+      "pause_before": "10s",
+      "scripts": [
+        "customize.sh"
+      ],
+      "type": "shell"
+    }
+  ],
+  "variables": {
+    "cpus": "$cpu",
+    "dcloud": "$disk",
+    "disk_size": "16384",
+    "headless": "true",
+    "iso_checksum": "d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d",
+    "iso_checksum_type": "sha256",
+    "memory": "$memory",
+    "mirror": "https://releases.ubuntu.com",
+    "ssh_timeout": "120m",
+    "image_name": "${image_name}-${os_code}",
+    "vm_version": "$version",
+    "output_dir": "output"
+  }
+}

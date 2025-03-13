@@ -46,7 +46,7 @@ def _prepare_preseed_cfg(username, password, swapsize, os_code):
                 f.write(Template(f0.read()).substitute({
                     'username': username,
                 }))
-    elif os_code == 'jammy':
+    elif os_code in ['noble', 'jammy']:
         with open(os.path.join('http', 'meta-data'), 'w'):
             pass
         with open(os.path.join(dir_path, 'user-data.template'), 'r') as f0:
@@ -56,6 +56,8 @@ def _prepare_preseed_cfg(username, password, swapsize, os_code):
                     'username': username,
                     'password': "$6$rounds=4096$qTkeu80w$rVbH7vdAfjnTEt9DkudHJJ1glfeNSP4Q.nLTHoeY5CfH6NuUYwEmJtsgBjNBFEAxw7L8rGTQ6ilDPRbOqFnFq/"
                 }))
+    else:
+        raise ValueError(f"Unsupported OS code: {os_code}")
 
 
 def _prepare_ovf(name, os_code, memory, cpu, disk, version):
@@ -83,9 +85,9 @@ def _support_nat_localhostreachable():
 @click.command(help="Build Ubuntu")
 @click.option('--cpu', '-c', default=4, help="CPU count", show_default=True)
 @click.option('--memory', '-m', default=16384, type=int, help="Memory (MB)", show_default=True)
-@click.option('--disk', '-d', default=32, type=int, help="Disk size (GB)", show_default=True)
+@click.option('--disk', '-d', default=128, type=int, help="Disk size (GB)", show_default=True)
 @click.option('--swap', type=int, help="Swap size (MB)")
-@click.option('--os', "os_code", default='jammy', type=click.Choice(['focal', 'jammy']), help="OS code", show_default=True)
+@click.option('--os', "os_code", default='jammy', type=click.Choice(['focal', 'jammy', 'noble']), help="OS code", show_default=True)
 @click.option('--name', help="OVA filename")
 @click.option('--version', default='1.0.0', help="Version", show_default=True)
 @click.option('--redis-version', help="Install redis")
