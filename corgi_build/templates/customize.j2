@@ -1,7 +1,9 @@
 # basic
 set -x
-sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
+sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak || true
 sudo sed -i 's/jp\.//g' /etc/apt/sources.list || true
+sudo cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak || true
+sudo sed -i 's/jp\.//g' /etc/apt/sources.list.d/ubuntu.sources || true
 sudo apt update
 sudo apt-get install python3-venv -y
 sudo apt install python3-pip -y
