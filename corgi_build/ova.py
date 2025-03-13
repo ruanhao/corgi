@@ -87,7 +87,7 @@ def _support_nat_localhostreachable():
 @click.option('--memory', '-m', default=16384, type=int, help="Memory (MB)", show_default=True)
 @click.option('--disk', '-d', default=128, type=int, help="Disk size (GB)", show_default=True)
 @click.option('--swap', type=int, help="Swap size (MB)")
-@click.option('--os', "os_code", default='jammy', type=click.Choice(['focal', 'jammy', 'noble']), help="OS code", show_default=True)
+@click.option('--os', "os_code", default='noble', type=click.Choice(['focal', 'jammy', 'noble']), help="OS code", show_default=True)
 @click.option('--name', help="OVA filename")
 @click.option('--version', default='1.0.0', help="Version", show_default=True)
 @click.option('--redis-version', help="Install redis")
