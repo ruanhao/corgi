@@ -12,7 +12,7 @@
         apt install nfs-common -y
 {% endif %}
     fi
-    pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+    pip3 install --break-system-packages https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz || pip3 install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
 {% if efs %}
     # wait until EFS file system is available
     for _ in {1..60}; do # 10 minutes at most

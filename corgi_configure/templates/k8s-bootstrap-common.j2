@@ -123,7 +123,7 @@ systemctl start kubelet
 
 # Enable ssh password authentication
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-systemctl restart sshd
+systemctl restart sshd || systemctl restart ssh
 
 # Set Root password
 echo -e "kubeadmin\nkubeadmin" | passwd root

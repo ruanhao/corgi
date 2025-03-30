@@ -136,6 +136,11 @@ def ls_stacks(all):
                             ]))
 
 
+def _get_root_device(image_id: str) -> str:
+    root_device = key_find(ec2_client.describe_images(ImageIds=[image_id])['Images'], 'ImageId', image_id)['RootDeviceName']
+    info(f"Root device: {root_device}")
+    return root_device
+
 @cf.command(help="Launch AWS Instance(s)")
 @click.option("--image-id", '-i')
 @click.option("--stack-name", '-s', required=True)
@@ -144,7 +149,7 @@ def ls_stacks(all):
 @click.option('--volume-size', type=int, default=80, help='Boot Ebs volume size (GB)', show_default=True)
 @click.option('--keyname', required=True, envvar="AWS_KEYPAIR", help='Key name to ssh with (env: AWS_KEYPAIR)', show_default=True)
 @click.option('--add-volume', is_flag=True, help='Add additional volume', show_default=True)
-@click.option('--add-ephemeral', is_flag=True, help='Add instance store', hidden=True)  # seems instance store is decided by instance type
+# @click.option('--add-ephemeral', is_flag=True, help='Add instance store', hidden=True)  # seems instance store is decided by instance type
 @click.option('--dry', is_flag=True)
 @click.option('--with-eip', is_flag=True, help='Associate EIP to the instance', show_default=True)
 @click.option('--debug', is_flag=True)
@@ -164,7 +169,7 @@ def launch_instances(
         json_format,
         add_volume,
         with_eip,
-        add_ephemeral,
+        # add_ephemeral,
         ingress_ports
 ):
     # stack_name += YmdHMS()
@@ -218,7 +223,7 @@ def launch_instances(
     }
 
     additional_ingress_rules = []
-    for port in [22, 443, 80]:
+    for port in [22, 443, 80, 6443]:
         additional_ingress_rules.append(
             SecurityGroupRule(
                 IpProtocol='tcp',
@@ -323,14 +328,13 @@ def launch_instances(
                 ),
                 BlockDeviceMappings=flatten([
                     BlockDeviceMapping(
-                        # boot volume should be /dev/xvda, others could be in the range of /dev/xvdf to /dev/xvdp
-                        DeviceName="/dev/xvda",  # boot block device
+                        DeviceName=_get_root_device(image_id),  # boot volume
                         Ebs=EBSBlockDevice(DeleteOnTermination=True, Encrypted=False, VolumeSize=volume_size),
                     ),
-                    [BlockDeviceMapping(
-                        DeviceName="/dev/xvdb",
-                        VirtualName='ephemeral0',  # instance store
-                    )] if add_ephemeral else [],
+                    # [BlockDeviceMapping(
+                    #     DeviceName="/dev/xvdb",
+                    #     VirtualName='ephemeral0',  # instance store
+                    # )] if add_ephemeral else [],
                 ]),
                 NetworkInterfaces=[
                     NetworkInterfaceProperty(

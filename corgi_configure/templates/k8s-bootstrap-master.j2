@@ -63,13 +63,6 @@ curl -L -s https://github.com/kubernetes-sigs/metrics-server/releases/download/v
 # Generate Cluster join command
 kubeadm token create --print-join-command | tee /joincluster.sh
 
-# Intalling helm
-curl https://baltocdn.com/helm/signing.asc | apt-key add -
-echo "deb https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
-apt-get update
-apt-get install helm=${HELM_VERSION}-1 -y
-helm completion bash > /etc/bash_completion.d/helm
-
 # Customize bashrc
 apt-get install bash-completion -y
 kubectl completion bash > /etc/bash_completion.d/kubectl
@@ -81,3 +74,10 @@ complete -F __start_kubectl k
 source /etc/kube-ps1.sh
 export PS1='$(kube_ps1)\$ '
 EOF
+
+# Intalling helm
+curl https://baltocdn.com/helm/signing.asc | apt-key add -
+echo "deb https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
+apt-get update
+apt-get install helm=${HELM_VERSION}-1 -y
+helm completion bash > /etc/bash_completion.d/helm

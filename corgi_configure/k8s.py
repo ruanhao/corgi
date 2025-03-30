@@ -6,7 +6,7 @@ from string import Template
 import tempfile
 from jinja2 import FileSystemLoader, Environment
 
-DEFAULT_K8S_VERSION = '1.32'
+DEFAULT_K8S_VERSION = '1.30'
 
 @as_root
 def _run_as_root(*args, **kwargs):
@@ -36,7 +36,7 @@ def _run(script, dry=False):
 @click.option("--kubernetes-version", default=DEFAULT_K8S_VERSION, show_default=True)
 @click.option("--pod-network", default='192.168.0.0/16', show_default=True)
 @click.option("--helm-version", default='3.8.2', show_default=True)
-@click.option("--metrics-server-version", default='0.6.1', show_default=True)
+@click.option("--metrics-server-version", default='0.7.2', show_default=True)
 @click.option("--hostname", "hostname", default='master', help='Master node hostname', show_default=True)
 @click.option(
     '--cni-plugin',
